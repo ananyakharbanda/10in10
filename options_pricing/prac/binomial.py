@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from black_scholes import black_scholes
 
 def binomial_tree(S, K, T, r, sigma, N, option_type='call'): 
     """
@@ -29,7 +30,7 @@ def binomial_tree(S, K, T, r, sigma, N, option_type='call'):
     # if it went up i times and down (N-i) times: final price = S * u^i * d^(N-i)
     
     # number of up moves
-    i = np.arrange(N + 1)
+    i = np.arange(N + 1)
     ST = S * (u ** i) * (d ** (N-i)) # ST is an array of all possible end prices sorted low to high
     
     # for a call: you profit if ST > K, otherwise worthless
@@ -52,3 +53,27 @@ def binomial_tree(S, K, T, r, sigma, N, option_type='call'):
     
     # After N iterations, we have a single number: today's price
     return payoffs[0]
+
+if __name__ == "__main__":
+    S, K, T, r, sigma = 100, 100, 1.0, 0.05, 0.20
+    
+    bs_call = black_scholes(S, K, T, r, sigma, 'call')
+    bs_put = black_scholes(S, K, T, r, sigma, 'put')
+    
+    print("black scholes exact: ")
+    print(f" call = {bs_call:.4f}")
+    print(f" put = {bs_put:.4f}")
+    print()
+    
+    print("binomial tree convergence: ")
+    print(f" {'N':>6} {'Call':>10} {'Put':>10} {'Call err':>10} {'Put err':>10}")
+    print(f" {'─'*6} {'─'*10} {'─'*10} {'─'*10} {'─'*10}")
+
+    for N in [1, 5, 10, 25, 50, 100, 200, 500, 1000, 5000]:
+        bt_call = binomial_tree(S, K, T, r, sigma, N, 'call')
+        bt_put = binomial_tree(S, K, T, r, sigma, N, 'put')
+        print(f" {N:>6} {bt_call:>10.4f} {bt_put:>10.4f}"
+                f" {bt_call - bs_call:>+10.4f} {bt_put - bs_put:>+10.4f}")
+
+        
+    
