@@ -20,10 +20,35 @@ def binomial_tree(S, K, T, r, sigma, N, option_type='call'):
     
     # the risk-neutral probability of an up move, not a real world prediction
     # probability that the expected return equals the risk-free rate
-    p = (np.exp(r * dt) - d) / (u -d)
+    p = (np.exp(r * dt) - d) / (u - d)
     
     # for discounting: how much $1 received one strep from now is worth today
     disc =  np.exp(-r * dt)
     
+    # stock prices at expiry: after N steps, stock can be at N+1 different prices
+    # if it went up i times and down (N-i) times: final price = S * u^i * d^(N-i)
     
+    # number of up moves
+    i = np.arrange(N + 1)
+    ST = S * (u ** i) * (d ** (N-i)) # ST is an array of all possible end prices sorted low to high
     
+    # for a call: you profit if ST > K, otherwise worthless
+    # for a put: you profit if ST < K, otherwise worthless
+    
+    if option_type == 'call':
+        payoffs = np.maximum(ST-K, 0)
+    else:
+        payoffs = np.maximum(K-ST, 0)
+
+    # start at expiry (step N) where we know the payoffs, then we step backwards to today (step 0)
+    # at each step, every node's value is: disc * (p * value_if_up + (1-p) * value_if_down)
+    # node's value = discounted average of where it could go next
+    
+    for step in range(N):
+        # payoffs[1:] = values of the "up" children 
+        # payoffs[:1] = values of the "down" children
+        payoffs = disc * (p * payoffs[1:] + (1-p) * payoffs[:-1])
+        # each iteration shrinks the array by 1: N+1 payoffs -> N values -> N-1 ... 1
+    
+    # After N iterations, we have a single number: today's price
+    return payoffs[0]
