@@ -16,7 +16,6 @@ models from scratch and compares them side-by-side.
 
 ## Screenshots
 
-![Dashboard](screenshots/dashboard.png)
 ![Convergence](screenshots/convergence.png)
 ![Greeks](screenshots/greeks.png)
 
