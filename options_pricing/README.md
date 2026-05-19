@@ -2,6 +2,7 @@
 
 An interactive option pricing dashboard built in Python. Implements three pricing
 models from scratch and compares them side-by-side.
+Link to app: https://optionspricing1.streamlit.app/
 
 ## Features
 
