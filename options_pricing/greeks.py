@@ -1,3 +1,4 @@
+from black_scholes import black_scholes
 def greeks(S, K, T, r, sigma, option_type='call'):
     h = 0.01
     price = black_scholes(S, K, T, r, sigma, option_type)
