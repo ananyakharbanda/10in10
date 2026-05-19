@@ -4,8 +4,10 @@ import streamlit as st
 
 from black_scholes import black_scholes
 from greeks import greeks
+from monte_carlo import monte_carlo
+from binomial import binomial_tree
 
-# streamlit app
+# app config
 st.set_page_config(page_title="Black-Scholes Pricer", layout="wide")
 st.title("Black-Scholes Option Pricer")
 
@@ -43,6 +45,75 @@ for i, col in enumerate(gcols):
         st.write(f"Call: {call_vals[i]:+.4f}")
         st.write(f"Put:  {put_vals[i]:+.4f}")
 
+# model comparison
+st.subheader("Model Comparison")
+
+bt_steps = st.sidebar.slider("Binomial Tree Steps", 10, 1000, 200, 10)
+mc_sims  = st.sidebar.slider("Monte Carlo Simulations", 1000, 500000, 100000, 1000)
+
+bt_call = binomial_tree(S, K, T, r, sigma, bt_steps, 'call')
+bt_put  = binomial_tree(S, K, T, r, sigma, bt_steps, 'put')
+mc_call, mc_call_se = monte_carlo(S, K, T, r, sigma, mc_sims, 'call')
+mc_put,  mc_put_se  = monte_carlo(S, K, T, r, sigma, mc_sims, 'put')
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown("**Black-Scholes (exact)**")
+    st.write(f"Call: ${call_price:.4f}")
+    st.write(f"Put:  ${put_price:.4f}")
+with col2:
+    st.markdown(f"**Binomial Tree (N={bt_steps})**")
+    st.write(f"Call: ${bt_call:.4f} (err: {bt_call - call_price:+.4f})")
+    st.write(f"Put:  ${bt_put:.4f} (err: {bt_put - put_price:+.4f})")
+with col3:
+    st.markdown(f"**Monte Carlo (n={mc_sims:,})**")
+    st.write(f"Call: ${mc_call:.4f} ± {mc_call_se:.4f} (err: {mc_call - call_price:+.4f})")
+    st.write(f"Put:  ${mc_put:.4f} ± {mc_put_se:.4f} (err: {mc_put - put_price:+.4f})")
+
+# convergence plot
+st.subheader("Convergence")
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+# binomial convergence
+bt_ns = np.unique(np.geomspace(10, 2000, num=80).astype(int))
+bt_errs = [abs(binomial_tree(S, K, T, r, sigma, int(n), 'call') - call_price) for n in bt_ns]
+
+ax1.loglog(bt_ns, bt_errs, color='darkorange', linewidth=1)
+ax1.axhline(0.01, color='gray', linestyle=':', linewidth=0.8, label='0.01 target')
+ax1.set_xlabel('number of steps')
+ax1.set_ylabel('absolute error')
+ax1.set_title('Binomial Tree Convergence')
+ax1.grid(True, alpha=0.3)
+ax1.legend()
+
+# monte carlo convergence
+mc_ns = np.unique(np.geomspace(100, 200000, num=100).astype(int))
+mc_prices = []
+mc_ses = []
+for n in mc_ns:
+    p, se = monte_carlo(S, K, T, r, sigma, int(n), 'call')
+    mc_prices.append(p)
+    mc_ses.append(se)
+mc_prices = np.array(mc_prices)
+mc_ses = np.array(mc_ses)
+
+ax2.semilogx(mc_ns, mc_prices, color='steelblue', linewidth=0.8)
+ax2.fill_between(mc_ns,
+                 mc_prices - 1.96 * mc_ses,
+                 mc_prices + 1.96 * mc_ses,
+                 alpha=0.25, color='steelblue', label='95% CI')
+ax2.axhline(call_price, color='crimson', linestyle='--', linewidth=1.5,
+            label=f'BS = {call_price:.4f}')
+ax2.set_xlabel('number of simulations')
+ax2.set_ylabel('call price estimate')
+ax2.set_title('Monte Carlo Convergence')
+ax2.grid(True, alpha=0.3)
+ax2.legend()
+
+plt.tight_layout()
+st.pyplot(fig)
+
 # payoff diagram
 st.subheader("Payoff at Expiry")
 
@@ -50,7 +121,7 @@ spots = np.linspace(S * 0.5, S * 1.5, 300)
 call_payoff = np.maximum(spots - K, 0) - call_price
 put_payoff  = np.maximum(K - spots, 0) - put_price
 
-fig, ax = plt.subplots(figsize=(10, 5))
+fig2, ax = plt.subplots(figsize=(10, 5))
 ax.plot(spots, call_payoff, color='steelblue', linewidth=2, label='Call P/L')
 ax.plot(spots, put_payoff,  color='darkorange', linewidth=2, label='Put P/L')
 ax.axhline(0, color='gray', linewidth=0.8)
@@ -67,7 +138,7 @@ ax.set_ylabel('Profit / Loss')
 ax.legend()
 ax.grid(True, alpha=0.3)
 ax.set_title(f'S={S}, K={K}, T={T:.2f}yr, σ={sigma*100:.0f}%, r={r*100:.1f}%')
-st.pyplot(fig)
+st.pyplot(fig2)
 
 # greeks curves
 st.subheader("Greeks vs Spot Price")
@@ -78,7 +149,7 @@ all_greeks_put  = [greeks(s, K, T, r, sigma, 'put')  for s in spots]
 _, deltas_c, gammas_c, vegas_c, thetas_c, rhos_c = zip(*all_greeks_call)
 _, deltas_p, gammas_p, vegas_p, thetas_p, rhos_p = zip(*all_greeks_put)
 
-fig2, axes = plt.subplots(2, 3, figsize=(14, 8))
+fig3, axes = plt.subplots(2, 3, figsize=(14, 8))
 
 for ax, call_data, put_data, title in [
     (axes[0, 0], deltas_c,  deltas_p,  "Delta"),
@@ -98,4 +169,4 @@ for ax, call_data, put_data, title in [
 
 axes[1, 2].axis('off')
 plt.tight_layout()
-st.pyplot(fig2)
+st.pyplot(fig3)
