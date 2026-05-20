@@ -21,3 +21,16 @@ def parse_one_trade(el):
         "open_close": a.get("openCloseIndicator"),
         "asset_class": a.get("assetCategory"),
     }
+
+# looping over each trade to build the dataframe
+
+def parse_trades(xml_text):
+    """Parse a full Flex report into a DataFrame of trades."""
+    root = ET.fromstring(xml_text)
+
+    trades = [parse_one_trade(el) for el in root.findall(".//Trade")]
+
+    df = pd.DataFrame(trades)
+    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S")
+    df = df.sort_values("datetime").reset_index(drop=True)
+    return df
