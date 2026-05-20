@@ -1,4 +1,5 @@
 import time
+import xml.etree.ElementTree as ET
 import requests
 
 # IBKR Flex Web Service v3 endpoints
@@ -20,7 +21,20 @@ def send_request(token, query_id):
     resp.raise_for_status()
     return resp.text
 
-if __name__ == "__main__":
-    token = "PASTE_YOUR_TOKEN"
-    query_id = "PASTE_YOUR_TRADES_QUERY_ID"
-    print(send_request(token, query_id))
+class FlexError(Exception):
+    """IBKR returned a failure status."""
+
+
+def parse_reference_code(xml_text):
+    """Pull the reference code out of a SendRequest response.
+    Raises FlexError if IBKR reported a failure."""
+    root = ET.fromstring(xml_text)
+
+    status = root.findtext("Status")
+    if status != "Success":
+        code = root.findtext("ErrorCode")
+        message = root.findtext("ErrorMessage")
+        raise FlexError(f"SendRequest failed [{code}]: {message}")
+
+    return root.findtext("ReferenceCode")
+
