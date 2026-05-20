@@ -28,9 +28,9 @@ def parse_trades(xml_text):
     """Parse a full Flex report into a DataFrame of trades."""
     root = ET.fromstring(xml_text)
 
-    trades = [parse_one_trade(el) for el in root.findall(".//Trade")]
+    trades = [parse_one_trade(el) for el in root.findall(".//Trade")] # searches at any depth below the root with list comprehension
 
-    df = pd.DataFrame(trades)
-    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S")
-    df = df.sort_values("datetime").reset_index(drop=True)
+    df = pd.DataFrame(trades) # pandas to turn dictionary into a table
+    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S") # converts into real pandas timestamps
+    df = df.sort_values("datetime").reset_index(drop=True) # sorts all values chronologically
     return df
