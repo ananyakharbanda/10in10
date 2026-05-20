@@ -38,3 +38,39 @@ def parse_reference_code(xml_text):
 
     return root.findtext("ReferenceCode")
 
+def get_statement(token, reference_code, max_attempts=24, wait_seconds=5):
+    """Poll GetStatement until the report is ready. Returns the XML report."""
+    for attempt in range(max_attempts):
+        resp = requests.get(
+            GET_URL,
+            params={"t": token, "q": reference_code, "v": "3"},
+            headers=HEADERS,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        body = resp.text
+
+        # If the report is ready, the body is the actual FlexQueryResponse.
+        if body.lstrip().startswith("<FlexQueryResponse"):
+            return body
+
+        # Otherwise it's a status envelope - check why.
+        root = ET.fromstring(body)
+        code = root.findtext("ErrorCode")
+        if code == "1019":
+            # "Statement generation in progress" - wait and retry.
+            time.sleep(wait_seconds)
+            continue
+
+        # Any other error is terminal.
+        message = root.findtext("ErrorMessage")
+        raise FlexError(f"GetStatement failed [{code}]: {message}")
+
+    raise FlexError(f"Report not ready after {max_attempts * wait_seconds}s")
+
+def fetch_flex_report(token, query_id):
+    """Run a Flex query end to end. Returns the raw XML report."""
+    response = send_request(token, query_id)
+    reference_code = parse_reference_code(response)
+    return get_statement(token, reference_code)
+
