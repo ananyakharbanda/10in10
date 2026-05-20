@@ -2,6 +2,24 @@ import pandas as pd
 from data.benchmark import price_on
 
 
+def compute_all_trade_alphas(closed_df, benchmark_map, default_benchmark_prices,
+                             usdsgd_prices, benchmark_series_by_ticker):
+    """benchmark_map: {your_ticker -> benchmark_ticker}
+    benchmark_series_by_ticker: {benchmark_ticker -> price Series}
+    default_benchmark_prices: series to use when a ticker isn't in the map."""
+    rows = []
+    for _, t in closed_df.iterrows():
+        bench_ticker = benchmark_map.get(t["ticker"])
+        bench_prices = benchmark_series_by_ticker.get(bench_ticker,
+                                                       default_benchmark_prices)
+        row = compute_trade_alpha(t, bench_prices, usdsgd_prices)
+        row["benchmark"] = bench_ticker or "QQQ (default)"
+        rows.append(row)
+    df = pd.DataFrame(rows)
+    df["alpha_per_day_usd"] = df["alpha_usd"] / df["hold_days"]
+    df["alpha_per_day_sgd"] = df["alpha_sgd"] / df["hold_days"]
+    return df
+
 def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
     """One closed trip's alpha vs the benchmark, in BOTH USD and SGD.
 
@@ -83,15 +101,23 @@ if __name__ == "__main__":
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
     closed, _ = match_round_trips(trades)
 
+    # The methodology: which index each holding answers to.
+    BENCHMARK_MAP = {
+        "NVDA": "QQQ", "MSFT": "QQQ", "GOOG": "QQQ", "AMZN": "QQQ",
+        "QQQ": "QQQ", "TSM": "SOXX", "MC": "IEUR",
+    }
+
     start, end = closed["entry_date"].min(), pd.Timestamp.today()
-    qqq = get_benchmark_prices("QQQ", start, end)
+    # Fetch each distinct benchmark once (cached after first run).
+    distinct = set(BENCHMARK_MAP.values())
+    series_by_ticker = {bt: get_benchmark_prices(bt, start, end) for bt in distinct}
     usdsgd = get_benchmark_prices("USDSGD=X", start, end)
 
-    alphas = compute_all_trade_alphas(closed, qqq, usdsgd)
-    pd.set_option("display.width", 200)
-    pd.set_option("display.max_columns", 20)
-    print(alphas[["ticker", "quantity", "hold_days", "benchmark_return",
-                  "your_pnl_usd", "benchmark_pnl_usd", "alpha_usd", "alpha_sgd"]]
-          .to_string(index=False))
+    alphas = compute_all_trade_alphas(
+        closed, BENCHMARK_MAP, series_by_ticker["QQQ"], usdsgd, series_by_ticker)
+
+    pd.set_option("display.width", 200); pd.set_option("display.max_columns", 20)
+    print(alphas[["ticker", "benchmark", "quantity", "hold_days",
+                  "benchmark_return", "alpha_usd", "alpha_sgd"]].to_string(index=False))
     print(f"\nTotal alpha USD: {alphas['alpha_usd'].sum():,.2f}")
     print(f"Total alpha SGD: {alphas['alpha_sgd'].sum():,.2f}")
