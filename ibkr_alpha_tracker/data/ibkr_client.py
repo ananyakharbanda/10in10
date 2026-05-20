@@ -74,3 +74,10 @@ def fetch_flex_report(token, query_id):
     reference_code = parse_reference_code(response)
     return get_statement(token, reference_code)
 
+if __name__ == "__main__":
+    token = "YOUR_TOKEN_HERE" 
+    query_id = "YOUR_QUERY_ID_HERE" 
+    xml = fetch_flex_report(token, query_id)
+    print(f"Got {len(xml)} characters of XML")
+    # print(xml[:500]) 
+    # print(xml[2000:3500])
