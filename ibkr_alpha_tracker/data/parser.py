@@ -34,3 +34,24 @@ def parse_trades(xml_text):
     df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S") # converts into real pandas timestamps
     df = df.sort_values("datetime").reset_index(drop=True) # sorts all values chronologically
     return df
+
+def filter_stock_trades(df):
+    """Keep only real stock trades, dropping forex conversions and other asset classes."""
+    return df[df["asset_class"] == "STK"].reset_index(drop=True)
+
+if __name__ == "__main__":
+    import sys
+    sys.path.append("..")          # so we can import the sibling fetcher
+    from ibkr_client import fetch_flex_report
+
+    token = "your token" 
+    query_id = "your query id"
+
+    xml = fetch_flex_report(token, query_id)
+
+    df = parse_trades(xml)
+    stocks = filter_stock_trades(df)
+
+    print(f"Parsed {len(df)} total rows, {len(stocks)} real stock trades")
+    print(stocks[["datetime", "ticker", "action", "quantity", "price", "currency", "open_close"]])
+    print("\nStock tickers:", sorted(stocks['ticker'].unique()))
