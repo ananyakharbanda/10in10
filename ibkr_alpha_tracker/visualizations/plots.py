@@ -132,6 +132,57 @@ def returns_scatter(alphas_df, currency="usd"):
     return fig
 
 
+
+def monthly_alpha_heatmap(daily_df, currency="usd"):
+    """Grid of alpha generated per month (rows=years, cols=months), green/red
+    around zero. Reads the daily curve, resampled to monthly. Each cell is the
+    change in cumulative alpha over that month - a view transform, no new math."""
+    cum = daily_df["cum_alpha_dollars"]
+    ccy = currency.upper()
+    monthly = cum.resample("ME").last()
+    monthly_delta = monthly.diff()
+    monthly_delta.iloc[0] = monthly.iloc[0]   # first month = its end level
+
+    grid = pd.DataFrame({"year": monthly_delta.index.year,
+                         "month": monthly_delta.index.month,
+                         "alpha": monthly_delta.values})
+    pivot = grid.pivot(index="year", columns="month", values="alpha").reindex(columns=range(1, 13))
+    months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+    import numpy as np
+    bound = np.nanmax(np.abs(pivot.values)) or 1
+    fig = go.Figure(go.Heatmap(
+        z=pivot.values, x=months, y=[str(y) for y in pivot.index],
+        zmid=0, zmin=-bound, zmax=bound,
+        colorscale=[[0,"#ef4444"],[0.5,"#ffffff"],[1,"#22c55e"]],
+        text=[[f"{v:+,.0f}" if pd.notna(v) else "" for v in row] for row in pivot.values],
+        texttemplate="%{text}", hoverongaps=False, colorbar=dict(title=ccy)))
+    fig.update_layout(title=f"Monthly Alpha ({ccy})", template="plotly_white",
+                      height=260, margin=dict(l=60, r=20, t=50, b=30),
+                      yaxis=dict(autorange="reversed"))
+    return fig
+
+
+def holdings_treemap(open_alphas_df, currency="usd"):
+    """Open positions as tiles sized by current market value, tinted by live
+    (unrealized) alpha. Reads value_{ccy} + alpha_{ccy} from positions.py;
+    multiple lots of one ticker are merged into a single tile."""
+    df = open_alphas_df[open_alphas_df["is_primary"]].copy()
+    df = df.groupby("ticker", as_index=False).agg(
+        value=(f"value_{currency}", "sum"), alpha=(f"alpha_{currency}", "sum"))
+    ccy = currency.upper()
+    bound = df["alpha"].abs().max() or 1
+    fig = go.Figure(go.Treemap(
+        labels=df["ticker"], parents=[""] * len(df), values=df["value"],
+        marker=dict(colors=df["alpha"], cmid=0, cmin=-bound, cmax=bound,
+                    colorscale=[[0,"#ef4444"],[0.5,"#ffffff"],[1,"#22c55e"]],
+                    colorbar=dict(title=f"alpha {ccy}")),
+        text=[f"{v:,.0f} {ccy}<br>alpha {a:+,.0f}" for v, a in zip(df["value"], df["alpha"])],
+        texttemplate="%{label}<br>%{text}", hovertemplate="%{label}<extra></extra>"))
+    fig.update_layout(title=f"Open Holdings by Value, tinted by live alpha ({ccy})",
+                      template="plotly_white", height=420, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
 if __name__ == "__main__":
     import config
     from data.ibkr_client import fetch_flex_report
@@ -140,6 +191,7 @@ if __name__ == "__main__":
     from portfolio.matching import match_round_trips
     from portfolio.counterfactual import compute_all_trade_alphas
     from portfolio.curve import build_daily_alpha
+    from portfolio.positions import value_open_lots
 
     trades = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
@@ -161,6 +213,7 @@ if __name__ == "__main__":
     fx_to_usd = {"EUR": get_benchmark_prices("EURUSD=X", start, end)}
 
     alphas = compute_all_trade_alphas(closed, BENCHMARK_MAP, series_by_ticker, usdsgd)
+    live = value_open_lots(open_lots, BENCHMARK_MAP, series_by_ticker, usdsgd, stock_prices)
 
     for ccy in ("usd", "sgd"):
         daily = build_daily_alpha(closed, open_lots, BENCHMARK_MAP, stock_prices,
@@ -169,4 +222,6 @@ if __name__ == "__main__":
         alpha_drawdown_chart(daily, ccy).write_html(f"drawdown_{ccy}.html")
         trade_alpha_waterfall(alphas, ccy).write_html(f"waterfall_{ccy}.html")
         returns_scatter(alphas, ccy).write_html(f"scatter_{ccy}.html")
-        print(f"Wrote hero_{ccy}, drawdown_{ccy}, waterfall_{ccy}, scatter_{ccy} (.html)")
+        monthly_alpha_heatmap(daily, ccy).write_html(f"heatmap_{ccy}.html")
+        holdings_treemap(live, ccy).write_html(f"treemap_{ccy}.html")
+        print(f"Wrote hero/drawdown/waterfall/scatter/heatmap/treemap _{ccy} (.html)")
