@@ -162,3 +162,6 @@ if __name__ == "__main__":
         out = f"hero_{ccy}.html"
         fig.write_html(out)
         print(f"Wrote {out} - open it in your browser")
+        trade_alpha_waterfall(alphas, currency=ccy).write_html(f"waterfall_{ccy}.html")
+        returns_scatter(alphas, currency=ccy).write_html(f"scatter_{ccy}.html")
+        print(f"Wrote waterfall_{ccy}.html, scatter_{ccy}.html")
