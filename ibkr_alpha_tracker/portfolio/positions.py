@@ -54,6 +54,7 @@ def value_open_lots(open_df, benchmark_map, series_by_ticker, usdsgd_prices,
             row = compute_trade_alpha(synth, series_by_ticker[bench_ticker], usdsgd_prices)
             row["benchmark"] = bench_ticker
             row["is_primary"] = (i == 0)
+            row["entry_price"] = lot["entry_price"]
             row["mark_price"] = mark
             row["status"] = "OPEN"
             rows.append(row)
