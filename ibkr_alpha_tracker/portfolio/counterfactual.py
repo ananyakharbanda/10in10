@@ -1,24 +1,9 @@
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 from data.benchmark import price_on
 
-
-def compute_all_trade_alphas(closed_df, benchmark_map, default_benchmark_prices,
-                             usdsgd_prices, benchmark_series_by_ticker):
-    """benchmark_map: {your_ticker -> benchmark_ticker}
-    benchmark_series_by_ticker: {benchmark_ticker -> price Series}
-    default_benchmark_prices: series to use when a ticker isn't in the map."""
-    rows = []
-    for _, t in closed_df.iterrows():
-        bench_ticker = benchmark_map.get(t["ticker"])
-        bench_prices = benchmark_series_by_ticker.get(bench_ticker,
-                                                       default_benchmark_prices)
-        row = compute_trade_alpha(t, bench_prices, usdsgd_prices)
-        row["benchmark"] = bench_ticker or "QQQ (default)"
-        rows.append(row)
-    df = pd.DataFrame(rows)
-    df["alpha_per_day_usd"] = df["alpha_usd"] / df["hold_days"]
-    df["alpha_per_day_sgd"] = df["alpha_sgd"] / df["hold_days"]
-    return df
 
 def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
     """One closed trip's alpha vs the benchmark, in BOTH USD and SGD.
@@ -59,7 +44,7 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
     your_pnl_usd = native_exit_value * ntu_exit - native_capital * ntu_entry
     your_pnl_sgd = native_exit_value * nts_exit - native_capital * nts_entry
 
-    # Counterfactual: same entry capital into QQQ (a USD-denominated asset).
+    # Counterfactual: same entry capital into the benchmark (USD-denominated).
     capital_usd = native_capital * ntu_entry
     bench_value_usd = capital_usd * (1 + benchmark_return)
     benchmark_pnl_usd = bench_value_usd - capital_usd
@@ -79,18 +64,26 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
     }
 
 
-def compute_all_trade_alphas(closed_df, benchmark_prices, usdsgd_prices):
-    """Map compute_trade_alpha over all closed trips -> a DataFrame."""
-    rows = [compute_trade_alpha(t, benchmark_prices, usdsgd_prices)
-            for _, t in closed_df.iterrows()]
+def compute_all_trade_alphas(closed_df, benchmark_map, series_by_ticker,
+                             usdsgd_prices, default_benchmark="QQQ"):
+    """benchmark_map: {your_ticker -> [benchmark_ticker, ...]}.
+    A holding can list several benchmarks (e.g. TSM -> QQQ and SOXX).
+    Produces long format: one row per (trip, benchmark)."""
+    rows = []
+    for _, t in closed_df.iterrows():
+        benches = benchmark_map.get(t["ticker"], [default_benchmark])
+        for i, bench_ticker in enumerate(benches):
+            row = compute_trade_alpha(t, series_by_ticker[bench_ticker], usdsgd_prices)
+            row["benchmark"] = bench_ticker
+            row["is_primary"] = (i == 0)   # first listed = primary, for totals
+            rows.append(row)
     df = pd.DataFrame(rows)
     df["alpha_per_day_usd"] = df["alpha_usd"] / df["hold_days"]
     df["alpha_per_day_sgd"] = df["alpha_sgd"] / df["hold_days"]
     return df
 
+
 if __name__ == "__main__":
-    import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import config
     from data.ibkr_client import fetch_flex_report
     from data.parser import parse_trades, filter_stock_trades
@@ -101,23 +94,24 @@ if __name__ == "__main__":
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
     closed, _ = match_round_trips(trades)
 
-    # The methodology: which index each holding answers to.
+    # The methodology: which index/indices each holding answers to.
+    # First in each list is the "primary" benchmark (used for headline totals).
     BENCHMARK_MAP = {
-        "NVDA": "QQQ", "MSFT": "QQQ", "GOOG": "QQQ", "AMZN": "QQQ",
-        "QQQ": "QQQ", "TSM": "SOXX", "MC": "IEUR",
+        "NVDA": ["QQQ"], "MSFT": ["QQQ"], "GOOG": ["QQQ"], "AMZN": ["QQQ"],
+        "QQQ": ["QQQ"], "TSM": ["QQQ", "SOXX"], "MC": ["FEZ"],
     }
 
     start, end = closed["entry_date"].min(), pd.Timestamp.today()
-    # Fetch each distinct benchmark once (cached after first run).
-    distinct = set(BENCHMARK_MAP.values())
+    distinct = {b for benches in BENCHMARK_MAP.values() for b in benches}
     series_by_ticker = {bt: get_benchmark_prices(bt, start, end) for bt in distinct}
     usdsgd = get_benchmark_prices("USDSGD=X", start, end)
 
-    alphas = compute_all_trade_alphas(
-        closed, BENCHMARK_MAP, series_by_ticker["QQQ"], usdsgd, series_by_ticker)
+    alphas = compute_all_trade_alphas(closed, BENCHMARK_MAP, series_by_ticker, usdsgd)
 
-    pd.set_option("display.width", 200); pd.set_option("display.max_columns", 20)
+    pd.set_option("display.width", 200)
+    pd.set_option("display.max_columns", 20)
     print(alphas[["ticker", "benchmark", "quantity", "hold_days",
                   "benchmark_return", "alpha_usd", "alpha_sgd"]].to_string(index=False))
-    print(f"\nTotal alpha USD: {alphas['alpha_usd'].sum():,.2f}")
-    print(f"Total alpha SGD: {alphas['alpha_sgd'].sum():,.2f}")
+    primary = alphas[alphas["is_primary"]]
+    print(f"\nTotal alpha (primary benchmarks)  USD: {primary['alpha_usd'].sum():,.2f}")
+    print(f"Total alpha (primary benchmarks)  SGD: {primary['alpha_sgd'].sum():,.2f}")
