@@ -10,10 +10,10 @@ def value_open_lots(open_df, benchmark_map, series_by_ticker, usdsgd_prices,
                     stock_prices_by_ticker, as_of=None, default_benchmark="QQQ"):
     """Live (unrealized) alpha for each open lot, marked to `as_of` (today).
 
-    The trick: an open lot is just a trip that 'closes' today at the current
-    market price. We build that synthetic trip and reuse compute_trade_alpha,
-    so all the dual-currency / FX-drift logic is shared with closed trades.
-    Produces one row per (lot, benchmark)."""
+    An open lot is just a trip that 'closes' today at the current market price.
+    We build that synthetic trip and reuse compute_trade_alpha, so all the
+    dual-currency / FX-drift logic is shared with closed trades. Produces one
+    row per (lot, benchmark)."""
     as_of = pd.Timestamp(as_of or pd.Timestamp.today()).normalize()
     usdsgd_today = price_on(usdsgd_prices, as_of)
 
@@ -33,10 +33,8 @@ def value_open_lots(open_df, benchmark_map, series_by_ticker, usdsgd_prices,
         else:
             # No live native->SGD series on hand. Only matters for open
             # NON-USD positions, of which there are currently none.
-            # Refine in Day 6 if you hold foreign stocks open.
             exit_fx = lot["entry_fx"]
 
-        # An open lot, dressed up as a trip that closes today at the mark.
         synth = {
             "ticker": ticker,
             "quantity": lot["quantity"],
@@ -56,13 +54,16 @@ def value_open_lots(open_df, benchmark_map, series_by_ticker, usdsgd_prices,
             row["is_primary"] = (i == 0)
             row["entry_price"] = lot["entry_price"]
             row["mark_price"] = mark
+            # Current market value of the position, exposed for the treemap.
+            row["value_usd"] = row["exit_value_usd"]
+            row["value_sgd"] = row["exit_value_sgd"]
             row["status"] = "OPEN"
             rows.append(row)
 
     cols_order = ["ticker", "benchmark", "status", "quantity", "entry_date",
                   "entry_price", "mark_price", "hold_days", "benchmark_return",
-                  "your_pnl_usd", "your_pnl_sgd", "alpha_usd", "alpha_sgd",
-                  "is_primary"]
+                  "your_pnl_usd", "your_pnl_sgd", "value_usd", "value_sgd",
+                  "alpha_usd", "alpha_sgd", "is_primary"]
     df = pd.DataFrame(rows)
     return df[cols_order] if not df.empty else df
 
@@ -82,18 +83,17 @@ if __name__ == "__main__":
         "NVDA": ["QQQ"], "MSFT": ["QQQ"], "GOOG": ["QQQ"], "AMZN": ["QQQ"],
         "QQQ": ["QQQ"], "TSM": ["QQQ", "SOXX"], "MC": ["FEZ"],
     }
+    YF_SYMBOL = {"MC": "MC.PA"}
 
     start = open_lots["entry_date"].min()
     end = pd.Timestamp.today()
 
-    # Fetch each distinct benchmark once...
     distinct_benches = {b for benches in BENCHMARK_MAP.values() for b in benches}
     series_by_ticker = {bt: get_benchmark_prices(bt, start, end) for bt in distinct_benches}
     usdsgd = get_benchmark_prices("USDSGD=X", start, end)
 
-    # ...and today's price for each of YOUR open holdings (ticker-agnostic fetch).
     open_tickers = open_lots["ticker"].unique()
-    stock_prices = {t: get_benchmark_prices(t, start, end) for t in open_tickers}
+    stock_prices = {t: get_benchmark_prices(YF_SYMBOL.get(t, t), start, end) for t in open_tickers}
 
     live = value_open_lots(open_lots, BENCHMARK_MAP, series_by_ticker, usdsgd, stock_prices)
 
