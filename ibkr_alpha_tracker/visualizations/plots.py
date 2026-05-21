@@ -132,6 +132,7 @@ if __name__ == "__main__":
     from data.benchmark import get_benchmark_prices
     from portfolio.matching import match_round_trips
     from portfolio.curve import build_daily_alpha
+    from portfolio.counterfactual import compute_all_trade_alphas
 
     trades = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
@@ -151,6 +152,7 @@ if __name__ == "__main__":
     series_by_ticker = {bt: get_benchmark_prices(bt, start, end) for bt in distinct}
     usdsgd = get_benchmark_prices("USDSGD=X", start, end)
     fx_to_usd = {"EUR": get_benchmark_prices("EURUSD=X", start, end)}
+    alphas = compute_all_trade_alphas(closed, BENCHMARK_MAP, series_by_ticker, usdsgd)
 
     for ccy in ("usd", "sgd"):
         daily = build_daily_alpha(closed, open_lots, BENCHMARK_MAP, stock_prices,
