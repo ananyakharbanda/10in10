@@ -61,6 +61,10 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
         # directly against benchmark_return on the scatter). Exposed here so the
         # chart layer never has to recompute it.
         "your_return": (native_exit_value - native_capital) / native_capital,
+        # Current market value of the position in each currency (for the
+        # open-position case this is qty x mark; used to size the treemap).
+        "exit_value_usd": native_exit_value * ntu_exit,
+        "exit_value_sgd": native_exit_value * nts_exit,
         "your_pnl_usd": your_pnl_usd, "your_pnl_sgd": your_pnl_sgd,
         "benchmark_pnl_usd": benchmark_pnl_usd, "benchmark_pnl_sgd": benchmark_pnl_sgd,
         "alpha_usd": your_pnl_usd - benchmark_pnl_usd,
