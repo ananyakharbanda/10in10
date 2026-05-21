@@ -3,3 +3,4 @@ __pycache__/
 .devcontainer/
 *.pyc
 config.py
+ibkr_alpha_tracker/data/cache/
