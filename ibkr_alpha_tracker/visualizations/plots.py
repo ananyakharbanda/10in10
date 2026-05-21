@@ -3,6 +3,59 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import plotly.graph_objects as go
 
+def trade_alpha_waterfall(alphas_df, currency="usd"):
+    """One bar per closed trade, sorted by exit date, green/red by sign,
+    cumulating to the total alpha. Reads closed-trade alphas (primary
+    benchmark only, so multi-benchmark trades aren't double-counted)."""
+    df = alphas_df[alphas_df["is_primary"]].copy().sort_values("exit_date")
+    col = f"alpha_{currency}"
+    ccy = currency.upper()
+    labels = [f"{r.ticker}<br>{pd.Timestamp(r.exit_date).date()}" for r in df.itertuples()]
+
+    fig = go.Figure(go.Waterfall(
+        orientation="v", measure=["relative"] * len(df),
+        x=labels, y=df[col],
+        text=[f"{v:+,.0f}" for v in df[col]], textposition="outside",
+        connector=dict(line=dict(color="#9ca3af")),
+        increasing=dict(marker=dict(color="#22c55e")),
+        decreasing=dict(marker=dict(color="#ef4444"))))
+    total = df[col].sum()
+    fig.add_hline(y=0, line=dict(color="#9ca3af", width=1))
+    fig.update_layout(
+        title=f"Per-Trade Alpha Contribution ({ccy}) — total {total:+,.0f}",
+        yaxis_title=f"Alpha ({ccy})", template="plotly_white", height=420,
+        margin=dict(l=70, r=20, t=50, b=60), showlegend=False)
+    return fig
+
+
+def returns_scatter(alphas_df, currency="usd"):
+    """Each trade's own return (y) vs its benchmark's return (x) over the
+    same hold. The 45-degree dashed line is break-even: above it you beat
+    the index. Reads your_return + benchmark_return - no math here."""
+    df = alphas_df[alphas_df["is_primary"]].copy()
+    yr = df["your_return"] * 100
+    br = df["benchmark_return"] * 100
+    lim = max(abs(pd.concat([yr, br])).max() * 1.15, 5)
+    colors = ["#22c55e" if b else "#ef4444" for b in (yr >= br)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[-lim, lim], y=[-lim, lim], mode="lines",
+        line=dict(color="#9ca3af", dash="dash"), name="Break-even (45°)", hoverinfo="skip"))
+    fig.add_trace(go.Scatter(
+        x=br, y=yr, mode="markers+text",
+        marker=dict(size=13, color=colors, line=dict(width=1, color="#374151")),
+        text=df["ticker"], textposition="top center",
+        hovertemplate="%{text}<br>You: %{y:.1f}%<br>Benchmark: %{x:.1f}%<extra></extra>"))
+    fig.update_layout(
+        title=f"Your Return vs Benchmark Return, per trade ({currency.upper()})",
+        xaxis_title="Benchmark return (%)", yaxis_title="Your return (%)",
+        template="plotly_white", height=460, showlegend=False,
+        xaxis=dict(range=[-lim, lim], zeroline=True),
+        yaxis=dict(range=[-lim, lim], zeroline=True, scaleanchor="x", scaleratio=1),
+        margin=dict(l=70, r=20, t=50, b=50))
+    return fig
+
 def alpha_drawdown_chart(daily_df, currency="usd"):
     """Underwater plot: how far below its high-water mark the cumulative
     alpha sits at each point. Reads the same daily DataFrame as the hero;
