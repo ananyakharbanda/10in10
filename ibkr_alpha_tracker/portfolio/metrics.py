@@ -50,3 +50,32 @@ def trade_summary(alphas_df, currency="usd"):
         "win_loss_ratio": avg["win_loss_ratio"],
         "total_alpha": s.sum(),
     }
+
+if __name__ == "__main__":
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import config
+    from data.ibkr_client import fetch_flex_report
+    from data.parser import parse_trades, filter_stock_trades
+    from data.benchmark import get_benchmark_prices
+    from portfolio.matching import match_round_trips
+    from portfolio.counterfactual import compute_all_trade_alphas
+
+    trades = filter_stock_trades(parse_trades(
+        fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
+    closed, _ = match_round_trips(trades)
+
+    BENCHMARK_MAP = {
+        "NVDA": ["QQQ"], "MSFT": ["QQQ"], "GOOG": ["QQQ"], "AMZN": ["QQQ"],
+        "QQQ": ["QQQ"], "TSM": ["QQQ", "SOXX"], "MC": ["FEZ"],
+    }
+    start, end = closed["entry_date"].min(), pd.Timestamp.today()
+    distinct = {b for benches in BENCHMARK_MAP.values() for b in benches}
+    series = {bt: get_benchmark_prices(bt, start, end) for bt in distinct}
+    usdsgd = get_benchmark_prices("USDSGD=X", start, end)
+    alphas = compute_all_trade_alphas(closed, BENCHMARK_MAP, series, usdsgd)
+
+    for ccy in ("usd", "sgd"):
+        print(f"\n=== Trade-level metrics ({ccy.upper()}) ===")
+        for k, v in trade_summary(alphas, ccy).items():
+            print(f"  {k:16} {v}")
