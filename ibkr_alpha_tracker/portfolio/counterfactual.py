@@ -57,6 +57,9 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
         "ticker": trip["ticker"], "quantity": qty, "currency": native,
         "entry_date": trip["entry_date"], "exit_date": trip["exit_date"],
         "hold_days": hold_days, "benchmark_return": benchmark_return,
+        # Your own gross price return in native currency (a ratio, so it pairs
+        # directly against benchmark_return on the scatter). Exposed here so the
+        # chart layer never has to recompute it.
         "your_return": (native_exit_value - native_capital) / native_capital,
         "your_pnl_usd": your_pnl_usd, "your_pnl_sgd": your_pnl_sgd,
         "benchmark_pnl_usd": benchmark_pnl_usd, "benchmark_pnl_sgd": benchmark_pnl_sgd,
@@ -95,8 +98,6 @@ if __name__ == "__main__":
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
     closed, _ = match_round_trips(trades)
 
-    # The methodology: which index/indices each holding answers to.
-    # First in each list is the "primary" benchmark (used for headline totals).
     BENCHMARK_MAP = {
         "NVDA": ["QQQ"], "MSFT": ["QQQ"], "GOOG": ["QQQ"], "AMZN": ["QQQ"],
         "QQQ": ["QQQ"], "TSM": ["QQQ", "SOXX"], "MC": ["FEZ"],
@@ -112,7 +113,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 200)
     pd.set_option("display.max_columns", 20)
     print(alphas[["ticker", "benchmark", "quantity", "hold_days",
-                  "benchmark_return", "alpha_usd", "alpha_sgd"]].to_string(index=False))
+                  "benchmark_return", "your_return", "alpha_usd", "alpha_sgd"]].to_string(index=False))
     primary = alphas[alphas["is_primary"]]
     print(f"\nTotal alpha (primary benchmarks)  USD: {primary['alpha_usd'].sum():,.2f}")
     print(f"Total alpha (primary benchmarks)  SGD: {primary['alpha_sgd'].sum():,.2f}")
