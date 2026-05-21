@@ -3,6 +3,34 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import plotly.graph_objects as go
 
+def alpha_drawdown_chart(daily_df, currency="usd"):
+    """Underwater plot: how far below its high-water mark the cumulative
+    alpha sits at each point. Reads the same daily DataFrame as the hero;
+    the running peak is a view transform, not new alpha math."""
+    cum = daily_df["cum_alpha_dollars"]
+    dates = daily_df.index
+    ccy = currency.upper()
+
+    peak = cum.cummax()             # high-water mark to date
+    underwater = cum - peak         # always <= 0
+    trough_date = underwater.idxmin()
+    max_dd = underwater.min()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dates, y=underwater, mode="lines", line=dict(color="#b91c1c", width=1.5),
+        fill="tozeroy", fillcolor="rgba(239,68,68,0.30)", name="Below peak",
+        hovertemplate="%{x|%Y-%m-%d}<br>Below peak: %{y:,.2f} " + ccy + "<extra></extra>"))
+    fig.add_hline(y=0, line=dict(color="#9ca3af", width=1, dash="dash"))
+    fig.add_annotation(
+        x=trough_date, y=max_dd, text=f"Max drawdown {max_dd:,.0f} {ccy}",
+        showarrow=True, arrowhead=2, ax=0, ay=-30, font=dict(color="#b91c1c"))
+
+    fig.update_layout(
+        title=f"Alpha Drawdown — depth below high-water mark ({ccy})",
+        yaxis_title=f"Below peak ({ccy})", template="plotly_white", height=300,
+        hovermode="x unified", margin=dict(l=70, r=20, t=50, b=40), showlegend=False)
+    return fig
 
 def alpha_equity_curve(daily_df, currency="usd"):
     """Hero chart: cumulative dollar alpha over time.
