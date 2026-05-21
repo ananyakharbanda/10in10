@@ -103,6 +103,9 @@ if __name__ == "__main__":
         daily = build_daily_alpha(closed, open_lots, BENCHMARK_MAP, stock_prices,
                                   series_by_ticker, fx_to_usd, usdsgd, currency=ccy)
         fig = alpha_equity_curve(daily, currency=ccy)
+        dd_fig = alpha_drawdown_chart(daily, currency=ccy)
+        dd_fig.write_html(f"drawdown_{ccy}.html")
+        print(f"Wrote drawdown_{ccy}.html")
         out = f"hero_{ccy}.html"
         fig.write_html(out)
         print(f"Wrote {out} - open it in your browser")
