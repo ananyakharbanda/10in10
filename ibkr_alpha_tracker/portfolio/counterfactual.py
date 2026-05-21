@@ -57,6 +57,7 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
         "ticker": trip["ticker"], "quantity": qty, "currency": native,
         "entry_date": trip["entry_date"], "exit_date": trip["exit_date"],
         "hold_days": hold_days, "benchmark_return": benchmark_return,
+        "your_return": (native_exit_value - native_capital) / native_capital,
         "your_pnl_usd": your_pnl_usd, "your_pnl_sgd": your_pnl_sgd,
         "benchmark_pnl_usd": benchmark_pnl_usd, "benchmark_pnl_sgd": benchmark_pnl_sgd,
         "alpha_usd": your_pnl_usd - benchmark_pnl_usd,
