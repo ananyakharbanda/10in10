@@ -1,0 +1,15 @@
+{
+  "default": "QQQ",
+  "map": {
+    "NVDA": ["QQQ"],
+    "MSFT": ["QQQ"],
+    "GOOG": ["QQQ"],
+    "AMZN": ["QQQ"],
+    "QQQ": ["QQQ"],
+    "TSM": ["QQQ", "SOXX"],
+    "MC": ["FEZ"]
+  },
+  "yf_symbol": {
+    "MC": "MC.PA"
+  }
+}
