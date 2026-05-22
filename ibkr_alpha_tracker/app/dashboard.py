@@ -19,6 +19,7 @@ from portfolio.curve import (build_daily_alpha, alpha_sharpe, alpha_sortino,
 from visualizations.plots import (alpha_equity_curve, alpha_drawdown_chart,
                                   trade_alpha_waterfall, returns_scatter,
                                   monthly_alpha_heatmap, holdings_treemap)
+from data.ledger import merge_trades
 
 _BENCHMARKS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "benchmarks.json")
@@ -42,8 +43,9 @@ def build_dashboard_payload(currency="usd"):
     benchmark_map, default_bench, yf_symbol = load_benchmarks()
 
     # --- live fetch + parse + match ---
-    trades = filter_stock_trades(parse_trades(
+    fresh = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
+    trades = merge_trades(fresh)          # union into the ledger, compute from it
     closed, open_lots = match_round_trips(trades)
 
     # --- price data through TODAY (cached; today's bar refreshed by TTL) ---
