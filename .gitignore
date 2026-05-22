@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 config.py
 ibkr_alpha_tracker/data/cache/
+ibkr_alpha_tracker/trade_ledger.csv
