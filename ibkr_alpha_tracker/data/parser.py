@@ -1,17 +1,17 @@
-# parses a single trade element
-
 import xml.etree.ElementTree as ET
 import pandas as pd
 
 
 def parse_one_trade(el):
     """Turn a single <Trade> XML element into a dict."""
-    a = el.attrib   # all the XML attributes as a dictionary
+    a = el.attrib
     return {
-        "datetime": a.get("dateTime"), # get returns None if a key is missing
+        # Stable per-execution ID from IBKR - the dedup key for the ledger.
+        "trade_id": a.get("ibExecID"),
+        "datetime": a.get("dateTime"),
         "ticker": a.get("underlyingSymbol") or a.get("symbol"),
         "action": a.get("buySell"),
-        "quantity": float(a.get("quantity", 0)), # if quantity is missing, use 0 because you cannot float(None)
+        "quantity": float(a.get("quantity", 0)),
         "price": float(a.get("tradePrice", 0)),
         "proceeds": float(a.get("proceeds", 0)),
         "commission": float(a.get("ibCommission", 0)),
@@ -22,36 +22,18 @@ def parse_one_trade(el):
         "asset_class": a.get("assetCategory"),
     }
 
-# looping over each trade to build the dataframe
 
 def parse_trades(xml_text):
     """Parse a full Flex report into a DataFrame of trades."""
     root = ET.fromstring(xml_text)
-
-    trades = [parse_one_trade(el) for el in root.findall(".//Trade")] # searches at any depth below the root with list comprehension
-
-    df = pd.DataFrame(trades) # pandas to turn dictionary into a table
-    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S") # converts into real pandas timestamps
-    df = df.sort_values("datetime").reset_index(drop=True) # sorts all values chronologically
+    trades = [parse_one_trade(el) for el in root.findall(".//Trade")]
+    df = pd.DataFrame(trades)
+    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y%m%d;%H%M%S")
+    df = df.sort_values("datetime").reset_index(drop=True)
     return df
 
+
 def filter_stock_trades(df):
-    """Keep only real stock trades, dropping forex conversions and other asset classes."""
+    """Keep only real stock trades, dropping forex conversions and other
+    asset classes."""
     return df[df["asset_class"] == "STK"].reset_index(drop=True)
-
-if __name__ == "__main__":
-    import sys
-    sys.path.append("..")          # so we can import the sibling fetcher
-    from ibkr_client import fetch_flex_report
-
-    token = "your token" 
-    query_id = "your query id"
-
-    xml = fetch_flex_report(token, query_id)
-
-    df = parse_trades(xml)
-    stocks = filter_stock_trades(df)
-
-    print(f"Parsed {len(df)} total rows, {len(stocks)} real stock trades")
-    print(stocks[["datetime", "ticker", "action", "quantity", "price", "currency", "open_close"]])
-    print("\nStock tickers:", sorted(stocks['ticker'].unique()))
