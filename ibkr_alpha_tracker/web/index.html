@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alpha Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+:root{
+  --paper:#f4efe4; --paper-2:#efe8d9; --card:#fbf8f1; --ink:#1c1813; --muted:#736a58;
+  --faint:#a99f8a; --line:rgba(28,24,19,.10); --line-2:rgba(28,24,19,.16);
+  --bronze:#9a6f3a; --bronze-soft:#bb904f; --pos:#1f8a52; --neg:#bf3b2f;
+  --pos-fill:rgba(34,197,94,.14); --neg-fill:rgba(239,68,68,.13);
+  --serif:'Fraunces',Georgia,serif; --sans:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;background-image:radial-gradient(circle at 20% 0,rgba(154,111,58,.05),transparent 55%);}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 80px}
+
+/* ---- header ---- */
+header{position:sticky;top:0;z-index:40;background:rgba(244,239,228,.86);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);}
+.bar{max-width:1180px;margin:0 auto;padding:18px 28px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.1;margin-right:auto}
+.brand .mark{font-family:var(--serif);font-weight:600;font-size:26px;letter-spacing:-.01em}
+.brand .mark em{font-style:italic;color:var(--bronze)}
+.brand .sub{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+.controls{display:flex;align-items:center;gap:10px}
+.asof{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.3}
+.asof b{display:block;color:var(--muted);font-weight:500}
+.toggle{display:inline-flex;border:1px solid var(--line-2);border-radius:999px;overflow:hidden;background:var(--card)}
+.toggle button{font-family:var(--mono);font-size:13px;font-weight:500;padding:7px 16px;border:0;background:transparent;
+  color:var(--muted);cursor:pointer;transition:.18s}
+.toggle button.on{background:var(--ink);color:var(--paper)}
+.ibtn{font-family:var(--sans);font-size:13px;font-weight:500;padding:8px 14px;border:1px solid var(--line-2);
+  border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer;transition:.18s;white-space:nowrap}
+.ibtn:hover{border-color:var(--bronze);color:var(--bronze)}
+.ibtn.ghost{border-style:dashed}
+
+/* ---- hero metrics ---- */
+.hero{margin:40px 0 14px;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+  opacity:0;transform:translateY(8px);animation:rise .6s forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.card .k{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.card .v{font-family:var(--mono);font-weight:500;letter-spacing:-.02em;margin-top:8px}
+.card.big .v{font-size:54px;line-height:1;font-weight:600}
+.card.big .note{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:12px}
+.card .v{font-size:30px}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.subgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:8px}
+.subgrid .card .v{font-size:24px}
+.split{display:flex;gap:8px;align-items:baseline}
+.split .lbl{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+
+/* ---- sections + charts ---- */
+section{margin-top:46px}
+.shead{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.shead h2{font-family:var(--serif);font-weight:500;font-size:23px;letter-spacing:-.01em}
+.shead p{font-size:13px;color:var(--muted)}
+.chart{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 8px;margin-top:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.plot{width:100%}
+
+/* ---- tables ---- */
+.tablewrap{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:11px 16px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--paper-2)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:rgba(154,111,58,.04)}
+td.num,td.tk{font-family:var(--mono)}
+td.tk{font-weight:500}
+.tag{font-family:var(--mono);font-size:11px;color:var(--bronze);background:rgba(154,111,58,.10);padding:2px 7px;border-radius:5px}
+
+/* ---- modal ---- */
+.scrim{position:fixed;inset:0;background:rgba(28,24,19,.42);backdrop-filter:blur(2px);z-index:60;
+  display:none;align-items:center;justify-content:center;padding:24px}
+.scrim.show{display:flex}
+.modal{background:var(--paper);border:1px solid var(--line-2);border-radius:16px;width:min(560px,100%);
+  max-height:86vh;overflow:auto;box-shadow:0 24px 60px rgba(28,24,19,.22)}
+.modal .mh{padding:22px 26px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper)}
+.modal .mh h3{font-family:var(--serif);font-weight:500;font-size:22px}
+.modal .mh p{font-size:13px;color:var(--muted);margin-top:3px}
+.modal .mb{padding:18px 26px}
+.row{display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px;align-items:center;margin-bottom:10px}
+.row input{font-family:var(--mono);font-size:13px;padding:9px 11px;border:1px solid var(--line-2);
+  border-radius:8px;background:var(--card);color:var(--ink);width:100%}
+.row input:focus{outline:none;border-color:var(--bronze)}
+.row .x{border:0;background:transparent;color:var(--faint);font-size:18px;cursor:pointer;padding:4px 8px}
+.row .x:hover{color:var(--neg)}
+.deflabel{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:6px 0 6px}
+.colhdr{display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px;font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--faint);margin-bottom:8px;padding-right:34px}
+.mf{padding:16px 26px 24px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--line)}
+.btn{font-family:var(--sans);font-size:14px;font-weight:500;padding:10px 20px;border-radius:9px;cursor:pointer;border:1px solid var(--line-2);background:var(--card);color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn.primary:hover{background:#000}
+
+/* ---- states ---- */
+#overlay{position:fixed;inset:0;background:var(--paper);z-index:80;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;transition:opacity .4s}
+#overlay.hide{opacity:0;pointer-events:none}
+.spin{width:34px;height:34px;border:3px solid var(--line-2);border-top-color:var(--bronze);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#overlay .msg{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.banner{display:none;background:var(--neg-fill);border:1px solid rgba(191,59,47,.35);color:var(--neg);
+  border-radius:12px;padding:14px 18px;margin-top:26px;font-size:14px}
+.banner.show{display:block}
+.busy{opacity:.45;pointer-events:none;transition:opacity .2s}
+@media(max-width:880px){.hero{grid-template-columns:1fr}.subgrid{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="overlay"><div class="spin"></div><div class="msg" id="omsg">Fetching your portfolio…</div></div>
+
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="mark">Alpha<em>Tracker</em></span>
+      <span class="sub">Benchmark-relative performance</span>
+    </div>
+    <div class="controls">
+      <div class="asof"><b>As of</b><span id="asof">—</span></div>
+      <div class="toggle" id="ccyToggle">
+        <button data-ccy="usd" class="on">USD</button>
+        <button data-ccy="sgd">SGD</button>
+      </div>
+      <button class="ibtn" id="refreshBtn" title="Recompute from live data">↻ Refresh</button>
+      <button class="ibtn ghost" id="editBtn">Benchmarks</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="banner" id="banner"></div>
+
+  <div class="hero" id="hero"></div>
+  <div class="subgrid" id="subgrid"></div>
+
+  <section>
+    <div class="shead"><h2>Cumulative alpha</h2><p>Dollars ahead of (or behind) the benchmark, over time</p></div>
+    <div class="chart"><div class="plot" id="equity_curve" style="height:420px"></div></div>
+  </section>
+
+  <section>
+    <div class="shead"><h2>Risk</h2><p>Drawdown from peak, and where capital sits today</p></div>
+    <div class="grid2">
+      <div class="chart"><div class="plot" id="drawdown" style="height:360px"></div></div>
+      <div class="chart"><div class="plot" id="treemap" style="height:360px"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="shead"><h2>Per-trade attribution</h2><p>Which closed trades earned the alpha, and how each compared to its index</p></div>
+    <div class="grid2">
+      <div class="chart"><div class="plot" id="waterfall" style="height:400px"></div></div>
+      <div class="chart"><div class="plot" id="scatter" style="height:400px"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="shead"><h2>Monthly alpha</h2><p>Dollars of alpha generated each month</p></div>
+    <div class="chart"><div class="plot" id="heatmap" style="height:280px"></div></div>
+  </section>
+
+  <section>
+    <div class="shead"><h2>Closed trades</h2></div>
+    <div class="tablewrap"><table id="tradesTable"></table></div>
+  </section>
+
+  <section>
+    <div class="shead"><h2>Open positions</h2></div>
+    <div class="tablewrap"><table id="positionsTable"></table></div>
+  </section>
+</div>
+
+<!-- benchmark editor -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <div class="mh">
+      <h3>Benchmark mapping</h3>
+      <p>Assign each ticker its counterfactual index. Saving recomputes everything.</p>
+    </div>
+    <div class="mb">
+      <div class="deflabel">Default (for any unlisted ticker)</div>
+      <input id="defInput" style="font-family:var(--mono);font-size:13px;padding:9px 11px;border:1px solid var(--line-2);border-radius:8px;background:var(--card);width:140px">
+      <div class="deflabel" style="margin-top:18px">Mapping</div>
+      <div class="colhdr"><span>Ticker</span><span>Benchmarks (comma-sep)</span><span></span></div>
+      <div id="rows"></div>
+      <button class="ibtn ghost" id="addRow" style="margin-top:6px">+ Add ticker</button>
+    </div>
+    <div class="mf">
+      <button class="btn" id="cancelBtn">Cancel</button>
+      <button class="btn primary" id="saveBtn">Save &amp; recompute</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let CCY = 'usd';
+let benchCfg = null;            // full benchmarks.json (preserves yf_symbol)
+const PLOTS = ['equity_curve','drawdown','treemap','waterfall','scatter','heatmap'];
+
+const SYM = c => (c === 'SGD' ? 'S$' : '$');
+const money = (v, ccy) => (v >= 0 ? '+' : '−') + SYM(ccy) + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = v => (v*100).toFixed(1) + '%';
+const cls = v => v >= 0 ? 'pos' : 'neg';
+
+/* ---------- data ---------- */
+async function load(refresh=false){
+  setBusy(true);
+  $('#banner').classList.remove('show');
+  try{
+    const r = await fetch(`/api/dashboard?currency=${CCY}` + (refresh ? '&refresh=true' : ''));
+    if(!r.ok){ const e = await r.json().catch(()=>({detail:r.statusText})); throw new Error(e.detail || 'Request failed'); }
+    const data = await r.json();
+    render(data);
+  }catch(err){
+    showError(err.message);
+  }finally{
+    setBusy(false);
+    $('#overlay').classList.add('hide');
+  }
+}
+
+function render(d){
+  const m = d.metrics, ccy = m.currency;
+  $('#asof').textContent = d.as_of;
+
+  $('#hero').innerHTML = `
+    <div class="card big" style="animation-delay:.02s">
+      <div class="k">Total alpha · ${ccy}</div>
+      <div class="v ${cls(m.total_alpha)}">${money(m.total_alpha,ccy)}</div>
+      <div class="note">${m.n_closed} closed · ${m.n_open} open positions</div>
+    </div>
+    <div class="card" style="animation-delay:.06s">
+      <div class="k">Realized</div><div class="v ${cls(m.realized_alpha)}">${money(m.realized_alpha,ccy)}</div>
+    </div>
+    <div class="card" style="animation-delay:.1s">
+      <div class="k">Unrealized</div><div class="v ${cls(m.unrealized_alpha)}">${money(m.unrealized_alpha,ccy)}</div>
+    </div>`;
+
+  $('#subgrid').innerHTML = `
+    <div class="card" style="animation-delay:.14s"><div class="k">Alpha Sharpe</div><div class="v ${cls(m.alpha_sharpe)}">${m.alpha_sharpe}</div></div>
+    <div class="card" style="animation-delay:.18s"><div class="k">Alpha Sortino</div><div class="v ${cls(m.alpha_sortino)}">${m.alpha_sortino}</div></div>
+    <div class="card" style="animation-delay:.22s"><div class="k">Win rate</div><div class="v">${m.win_rate}%</div></div>
+    <div class="card" style="animation-delay:.26s"><div class="k">Max drawdown</div><div class="v neg">${SYM(ccy)}${m.max_drawdown.toLocaleString()}</div></div>`;
+
+  for(const id of PLOTS) drawPlot(id, d.figures[id]);
+  renderTrades(d.trades, ccy);
+  renderPositions(d.positions, ccy);
+}
+
+/* ---------- charts (restyled onto the paper) ---------- */
+function drawPlot(id, fig){
+  if(!fig) return;
+  const layout = Object.assign({}, fig.layout, {
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+    font:{family:"'IBM Plex Sans', sans-serif", color:'#3a352c', size:12},
+    title: undefined, margin: fig.layout.margin || {l:60,r:24,t:18,b:42}
+  });
+  ['xaxis','yaxis'].forEach(ax=>{
+    layout[ax] = Object.assign({gridcolor:'rgba(28,24,19,.07)', zerolinecolor:'rgba(28,24,19,.18)',
+      linecolor:'rgba(28,24,19,.18)'}, fig.layout[ax]||{});
+  });
+  Plotly.newPlot(id, fig.data, layout, {responsive:true, displayModeBar:false});
+}
+
+/* ---------- tables ---------- */
+function renderTrades(rows, ccy){
+  const a = 'alpha_' + ccy.toLowerCase();
+  let h = `<thead><tr><th>Ticker</th><th>Benchmark</th><th>Entry</th><th>Exit</th><th>Days</th>
+           <th>Your return</th><th>Index return</th><th>Alpha · ${ccy}</th></tr></thead><tbody>`;
+  for(const t of rows){
+    h += `<tr><td class="tk">${t.ticker}</td><td><span class="tag">${t.benchmark}</span></td>
+      <td class="num">${t.entry_date}</td><td class="num">${t.exit_date}</td><td class="num">${t.hold_days}</td>
+      <td class="num">${pct(t.your_return)}</td><td class="num">${pct(t.benchmark_return)}</td>
+      <td class="num ${cls(t[a])}">${money(t[a],ccy)}</td></tr>`;
+  }
+  $('#tradesTable').innerHTML = h + '</tbody>';
+}
+function renderPositions(rows, ccy){
+  const a = 'alpha_' + ccy.toLowerCase(), v = 'value_' + ccy.toLowerCase();
+  let h = `<thead><tr><th>Ticker</th><th>Benchmark</th><th>Qty</th><th>Entry</th><th>Mark</th>
+           <th>Value · ${ccy}</th><th>Alpha · ${ccy}</th></tr></thead><tbody>`;
+  for(const p of rows){
+    h += `<tr><td class="tk">${p.ticker}</td><td><span class="tag">${p.benchmark}</span></td>
+      <td class="num">${p.quantity}</td><td class="num">${p.entry_price}</td><td class="num">${p.mark_price}</td>
+      <td class="num">${SYM(ccy)}${p[v].toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+      <td class="num ${cls(p[a])}">${money(p[a],ccy)}</td></tr>`;
+  }
+  $('#positionsTable').innerHTML = h + '</tbody>';
+}
+
+/* ---------- benchmark editor ---------- */
+async function openEditor(){
+  try{
+    const r = await fetch('/api/benchmarks'); benchCfg = await r.json();
+  }catch(e){ showError('Could not load benchmark config'); return; }
+  $('#defInput').value = benchCfg.default || 'QQQ';
+  $('#rows').innerHTML = '';
+  for(const [tk, list] of Object.entries(benchCfg.map || {})) addRow(tk, (list||[]).join(', '));
+  $('#scrim').classList.add('show');
+}
+function addRow(tk='', list=''){
+  const div = document.createElement('div'); div.className = 'row';
+  div.innerHTML = `<input class="tk" placeholder="NVDA" value="${tk}">
+                   <input class="bm" placeholder="QQQ, SOXX" value="${list}">
+                   <button class="x" title="Remove">×</button>`;
+  div.querySelector('.x').onclick = () => div.remove();
+  $('#rows').appendChild(div);
+}
+async function saveEditor(){
+  const map = {};
+  for(const row of document.querySelectorAll('#rows .row')){
+    const tk = row.querySelector('.tk').value.trim().toUpperCase();
+    const bm = row.querySelector('.bm').value.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    if(tk && bm.length) map[tk] = bm;
+  }
+  const cfg = Object.assign({}, benchCfg, {default: $('#defInput').value.trim().toUpperCase() || 'QQQ', map});
+  try{
+    const r = await fetch('/api/benchmarks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.detail || 'Save failed'); }
+    $('#scrim').classList.remove('show');
+    $('#omsg').textContent = 'Recomputing with new benchmarks…';
+    $('#overlay').classList.remove('hide');
+    await load(true);          // benchmark change => force recompute
+  }catch(e){ showError(e.message); }
+}
+
+/* ---------- ui plumbing ---------- */
+function setBusy(b){ $('.wrap').classList.toggle('busy', b); }
+function showError(msg){ const b = $('#banner'); b.textContent = '⚠ ' + msg; b.classList.add('show'); }
+
+$('#ccyToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  CCY = btn.dataset.ccy;
+  document.querySelectorAll('#ccyToggle button').forEach(b=>b.classList.toggle('on', b===btn));
+  load(false);
+});
+$('#refreshBtn').onclick = ()=>{ $('#omsg').textContent='Recomputing from live data…'; $('#overlay').classList.remove('hide'); load(true); };
+$('#editBtn').onclick = openEditor;
+$('#addRow').onclick = ()=>addRow();
+$('#cancelBtn').onclick = ()=>$('#scrim').classList.remove('show');
+$('#saveBtn').onclick = saveEditor;
+$('#scrim').addEventListener('click', e=>{ if(e.target === $('#scrim')) $('#scrim').classList.remove('show'); });
+
+window.addEventListener('resize', ()=>{ for(const id of PLOTS){ const el=$('#'+id); if(el && el.data) Plotly.Plots.resize(el); } });
+
+load(false);
+</script>
+</body>
+</html>
