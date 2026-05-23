@@ -43,7 +43,7 @@ header{position:sticky;top:0;z-index:40;background:rgba(244,239,228,.86);backdro
 .ibtn.ghost{border-style:dashed}
 
 /* ---- hero metrics ---- */
-.hero{margin:40px 0 14px;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:18px}
+.hero{margin:40px 0 14px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
   opacity:0;transform:translateY(8px);animation:rise .6s forwards}
 @keyframes rise{to{opacity:1;transform:none}}
@@ -251,15 +251,14 @@ function render(d){
 
   $('#hero').innerHTML = `
     <div class="card big" style="animation-delay:.02s">
-      <div class="k">Total alpha · ${ccy}</div>
+      <div class="k">Your actual profit · ${ccy}</div>
+      <div class="v ${cls(m.total_pnl)}">${money(m.total_pnl,ccy)}</div>
+      <div class="note">realized ${money(m.realized_pnl,ccy)} · unrealized ${money(m.unrealized_pnl,ccy)}</div>
+    </div>
+    <div class="card big" style="animation-delay:.06s">
+      <div class="k">Alpha vs benchmark · ${ccy}</div>
       <div class="v ${cls(m.total_alpha)}">${money(m.total_alpha,ccy)}</div>
-      <div class="note">${m.n_closed} closed · ${m.n_open} open positions</div>
-    </div>
-    <div class="card" style="animation-delay:.06s">
-      <div class="k">Realized</div><div class="v ${cls(m.realized_alpha)}">${money(m.realized_alpha,ccy)}</div>
-    </div>
-    <div class="card" style="animation-delay:.1s">
-      <div class="k">Unrealized</div><div class="v ${cls(m.unrealized_alpha)}">${money(m.unrealized_alpha,ccy)}</div>
+      <div class="note">realized ${money(m.realized_alpha,ccy)} · unrealized ${money(m.unrealized_alpha,ccy)} · ${m.n_closed} closed, ${m.n_open} open</div>
     </div>`;
 
   $('#subgrid').innerHTML = `
