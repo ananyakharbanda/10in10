@@ -22,9 +22,11 @@ def merge_trades(fresh_df, path=LEDGER_PATH):
     """Union fresh trades into the ledger by trade_id, persist, and return the
     full accumulated trade set.
 
-    First-seen wins: a trade_id already in the ledger is kept as-is; only
-    genuinely new trade_ids are appended. (Corrections/cancellations by IBKR
-    are not re-applied - a deliberate simplification; rare for retail.)"""
+    Last-seen-wins: a trade re-reported in the fresh fetch REPLACES its stored
+    copy, so IBKR corrections/amendments to in-window trades are picked up.
+    Trades that exist only in the ledger (aged out of the fetch window, e.g. a
+    backfilled MC buy) are preserved untouched. Cancellations that change the
+    trade_id are not auto-removed - a documented limitation."""
     if "trade_id" not in fresh_df.columns or fresh_df["trade_id"].isna().any():
         raise ValueError(
             "Trades are missing trade_id - the parser must populate ibExecID "
@@ -34,8 +36,10 @@ def merge_trades(fresh_df, path=LEDGER_PATH):
     if ledger.empty:
         combined = fresh_df.copy()
     else:
-        new_rows = fresh_df[~fresh_df["trade_id"].isin(ledger["trade_id"])]
-        combined = pd.concat([ledger, new_rows], ignore_index=True)
+        # keep ledger rows the fresh fetch does NOT re-report (aged-out history),
+        # then append the fresh versions (which supersede any stored duplicates).
+        kept = ledger[~ledger["trade_id"].isin(fresh_df["trade_id"])]
+        combined = pd.concat([kept, fresh_df], ignore_index=True)
 
     combined = combined.sort_values("datetime").reset_index(drop=True)
     combined.to_csv(path, index=False)
