@@ -31,10 +31,12 @@ def build_daily_alpha(closed, open_lots, benchmark_map, stock_prices,
     legs = []
     for _, t in closed.iterrows():
         legs.append((t["ticker"], t["quantity"], t["currency"], t["entry_date"],
-                     t["entry_price"], t["exit_date"], t["exit_price"]))
+                     t["entry_price"], t["exit_date"], t["exit_price"],
+                     t.get("entry_commission", 0.0), t.get("exit_commission", 0.0)))
     for _, t in open_lots.iterrows():
         legs.append((t["ticker"], t["quantity"], t["currency"], t["entry_date"],
-                     t["entry_price"], None, None))
+                     t["entry_price"], None, None,
+                     t.get("entry_commission", 0.0), 0.0))
     if not legs:
         return pd.DataFrame()
 
@@ -59,7 +61,7 @@ def build_daily_alpha(closed, open_lots, benchmark_map, stock_prices,
     your_value = pd.Series(0.0, index=days)
     bench_value = pd.Series(0.0, index=days)
 
-    for ticker, qty, native, e_date, e_price, x_date, x_price in legs:
+    for ticker, qty, native, e_date, e_price, x_date, x_price, e_comm, x_comm in legs:
         e = pd.Timestamp(e_date).normalize()
         bt = _primary_benchmark(ticker, benchmark_map, default_benchmark)
 
@@ -76,11 +78,17 @@ def build_daily_alpha(closed, open_lots, benchmark_map, stock_prices,
         your_value.loc[idx_open] += qty * stock_daily[ticker].loc[idx_open] * fxu_daily[native].loc[idx_open]
         bench_value.loc[idx_open] += bench_units * bench_daily[bt].loc[idx_open]
 
+        # Commissions hit YOUR side only (benchmark is frictionless): the entry
+        # commission from entry onward, the exit commission from exit onward.
+        # They're negative, so they shift your_value down by a constant.
+        your_value.loc[days[days >= e]] += e_comm * fxu_entry
+
         # Closed period: both sides banked at the exit (static thereafter).
         if x is not None:
             idx_closed = days[days >= x]
             your_value.loc[idx_closed] += qty * x_price * fxu_daily[native].asof(x)
             bench_value.loc[idx_closed] += bench_units * price_on(series_by_ticker[bt], x)
+            your_value.loc[idx_closed] += x_comm * fxu_daily[native].asof(x)
 
     # Express the whole book in the chosen display currency.
     if currency == "sgd":
