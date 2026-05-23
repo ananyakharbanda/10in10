@@ -25,6 +25,8 @@ each time you open it.
 - **Persistent trade ledger** — accumulates every trade ever seen, so history survives IBKR's
   365-day Flex window limit.
 - **Editable benchmarks** — assign benchmarks to tickers from the UI, no code changes.
+- **Loud failures** — unmatched ("orphan") sells surface as a warning banner instead of
+  silently understating performance.
 
 ## How it works
 
@@ -45,26 +47,34 @@ price-only on both sides (symmetric); alpha is net of your commissions.
 ```
 ibkr_alpha_tracker/
 ├── app/
+│   ├── __init__.py
 │   ├── dashboard.py      # orchestrator: runs the full pipeline -> one JSON payload
 │   └── server.py         # FastAPI backend (+ optional Basic Auth gate)
 ├── data/
 │   ├── ibkr_client.py    # Flex Web Service client (with date-range override)
 │   ├── parser.py         # XML -> trades DataFrame (keeps ibExecID as trade_id)
 │   ├── benchmark.py      # yfinance prices, cached with TTL + stale fallback
-│   └── ledger.py         # persistent trade ledger (dedup by trade_id)
+│   └── ledger.py         # persistent trade ledger (dedup by trade_id, last-seen-wins)
 ├── portfolio/
-│   ├── matching.py       # FIFO round-trip matching (+ commission apportionment)
+│   ├── matching.py       # FIFO round-trip matching (+ commission apportionment, orphans)
 │   ├── counterfactual.py # per-trade alpha, dual-currency, net of commissions
 │   ├── positions.py      # live unrealized alpha on open lots
-│   └── curve.py          # daily alpha series + Sharpe / Sortino / drawdown
+│   ├── curve.py          # daily alpha series + Sharpe / Sortino / drawdown
+│   └── metrics.py        # trade-level summary stats (win rate, profit factor, etc.)
 ├── visualizations/
 │   └── plots.py          # six Plotly figure builders
 ├── web/
 │   └── index.html        # the dashboard (HTML + CSS + Plotly.js)
-├── benchmarks.json       # editable ticker -> benchmark mapping
+├── testing/
+│   ├── verify.py         # end-to-end reconciliation check (run after any change)
+│   ├── check_ids.py      # one-off: confirm trade-id fields are present/unique
+│   ├── check_ledger.py   # one-off: inspect the ledger contents
+│   └── check_missing.py  # one-off: find trades missing a trade_id
 ├── backfill.py           # one-off: pull a historical window into the ledger
+├── benchmarks.json       # editable ticker -> benchmark mapping
 ├── config.py             # IBKR token + query IDs  (gitignored)
-└── requirements.txt
+├── requirements.txt
+└── README.md
 ```
 
 ## Setup
@@ -78,12 +88,12 @@ ibkr_alpha_tracker/
 3. **Create `config.py`** at the project root:
    ```python
    import os
-   IBKR_TOKEN        = os.environ.get("IBKR_TOKEN")        or "your-flex-token"
-   TRADES_QUERY_ID   = os.environ.get("TRADES_QUERY_ID")   or "your-trades-query-id"
-   POSITIONS_QUERY_ID= os.environ.get("POSITIONS_QUERY_ID")or "your-positions-query-id"
+   IBKR_TOKEN         = os.environ.get("IBKR_TOKEN")         or "your-flex-token"
+   TRADES_QUERY_ID    = os.environ.get("TRADES_QUERY_ID")    or "your-trades-query-id"
+   POSITIONS_QUERY_ID = os.environ.get("POSITIONS_QUERY_ID") or "your-positions-query-id"
    ```
-4. **(Optional) Backfill old trades.** IBKR Flex only returns the trailing 365 days. To
-   capture older trades once into the ledger, set the window in `backfill.py` and run it:
+4. **(Optional) Backfill old trades.** IBKR Flex only returns the trailing 365 days. To capture
+   older trades once into the ledger, set the window in `backfill.py` and run it:
    ```bash
    python backfill.py
    ```
@@ -103,11 +113,25 @@ export DASHBOARD_USER="you"
 export DASHBOARD_PASSWORD="a-strong-password"
 ```
 
+## Verify
+
+After any change, re-check that every number reconciles. Run the verifier **as a module from
+the project root** (so imports resolve):
+
+```bash
+python -m testing.verify
+```
+
+It recomputes the pipeline independently and asserts the key invariants — alpha decomposition,
+the three-engine reconciliation (curve endpoint == realized + unrealized), real-P&L identities,
+and that the dashboard's metrics match the recompute. The other `testing/check_*.py` scripts are
+one-off diagnostics; run them the same way, e.g. `python -m testing.check_ledger`.
+
 ## Configuration
 
 `benchmarks.json` maps each ticker to one or more benchmarks (the first is primary, used in
-totals). Anything unlisted falls back to `default`. `yf_symbol` overrides the Yahoo symbol
-where it differs (e.g. LVMH is `MC.PA`, not `MC`).
+totals). Anything unlisted falls back to `default`. `yf_symbol` overrides the Yahoo symbol where
+it differs (e.g. LVMH is `MC.PA`, not `MC`).
 
 ```json
 {
@@ -119,17 +143,19 @@ where it differs (e.g. LVMH is `MC.PA`, not `MC`).
 
 ## Methodology notes & limitations
 
-- **Matched-capital model:** alpha comes only from deployed capital; deposits/withdrawals
-  don't affect it (idle cash has no benchmark counterfactual).
+- **Matched-capital model:** alpha comes only from deployed capital; deposits/withdrawals don't
+  affect it (idle cash has no benchmark counterfactual).
 - **Net of commissions; price-only** (dividends excluded symmetrically on both sides).
 - **Benchmark treated as frictionless** — your commissions are charged to you, not the index.
 - **FX:** each cashflow converts at its own date's rate; banked proceeds in the daily curve
   float at the daily rate (a documented, defensible SGD-only nuance).
+- **Ledger:** last-seen-wins, so broker corrections to in-window trades are picked up;
+  cancellations that change a trade's id are not auto-removed (known limitation).
 - **Not yet implemented:** account-level time-weighted return (needs Cash Transactions),
-  dividend crediting, and statistical significance on the metrics. With a small trade count,
-  the risk metrics are correctly computed but not yet statistically meaningful.
+  dividend crediting, and statistical significance on the metrics. With a small trade count, the
+  risk metrics are correctly computed but not yet statistically meaningful.
 
 ## Tech
 
-Python · pandas · FastAPI · yfinance · Plotly / Plotly.js. No database — a local CSV ledger
-and a disk price cache.
+Python · pandas · FastAPI · yfinance · Plotly / Plotly.js. No database — a local CSV ledger and
+a disk price cache.
