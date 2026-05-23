@@ -69,14 +69,24 @@ def build_dashboard_payload(currency="usd"):
                               default_benchmark=default_bench)
 
     col = f"alpha_{currency}"
+    pnl_col = f"your_pnl_{currency}"      # your NET P&L (after commissions)
     primary_trades = alphas[alphas["is_primary"]]
     primary_open = live[live["is_primary"]]
     realized = primary_trades[col].sum()
     unrealized = primary_open[col].sum()
+    # Your actual profit (not benchmark-relative): realized on closed trades +
+    # unrealized on open positions, net of commissions, price-only.
+    realized_pnl = primary_trades[pnl_col].sum()
+    unrealized_pnl = primary_open[pnl_col].sum()
 
     # --- headline metrics ---
     metrics = {
         "currency": currency.upper(),
+        # Your real profit
+        "total_pnl": round(realized_pnl + unrealized_pnl, 2),
+        "realized_pnl": round(realized_pnl, 2),
+        "unrealized_pnl": round(unrealized_pnl, 2),
+        # Alpha (profit vs the benchmark counterfactual)
         "total_alpha": round(realized + unrealized, 2),
         "realized_alpha": round(realized, 2),
         "unrealized_alpha": round(unrealized, 2),
