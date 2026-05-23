@@ -117,7 +117,7 @@ if __name__ == "__main__":
 
     trades = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
-    closed, _ = match_round_trips(trades)
+    closed, _, _ = match_round_trips(trades)
 
     BENCHMARK_MAP = {
         "NVDA": ["QQQ"], "MSFT": ["QQQ"], "GOOG": ["QQQ"], "AMZN": ["QQQ"],

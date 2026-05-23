@@ -113,6 +113,10 @@ td.tk{font-weight:500}
 .banner{display:none;background:var(--neg-fill);border:1px solid rgba(191,59,47,.35);color:var(--neg);
   border-radius:12px;padding:14px 18px;margin-top:26px;font-size:14px}
 .banner.show{display:block}
+.warnbanner{display:none;background:rgba(154,111,58,.12);border:1px solid rgba(154,111,58,.4);
+  color:#7a5523;border-radius:12px;padding:12px 18px;margin-top:20px;font-size:13.5px;line-height:1.5}
+.warnbanner.show{display:block}
+.warnbanner b{display:block;margin-bottom:4px;letter-spacing:.03em;text-transform:uppercase;font-size:11px}
 .busy{opacity:.45;pointer-events:none;transition:opacity .2s}
 @media(max-width:880px){.hero{grid-template-columns:1fr}.subgrid{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 </style>
@@ -141,6 +145,7 @@ td.tk{font-weight:500}
 
 <div class="wrap">
   <div class="banner" id="banner"></div>
+  <div class="warnbanner" id="warnbanner"></div>
 
   <div class="hero" id="hero"></div>
   <div class="subgrid" id="subgrid"></div>
@@ -235,6 +240,14 @@ async function load(refresh=false){
 function render(d){
   const m = d.metrics, ccy = m.currency;
   $('#asof').textContent = d.as_of;
+
+  const wb = $('#warnbanner');
+  if(d.warnings && d.warnings.length){
+    wb.innerHTML = '<b>⚠ Data warning</b>' + d.warnings.map(w => `<div>${w}</div>`).join('');
+    wb.classList.add('show');
+  } else {
+    wb.classList.remove('show');
+  }
 
   $('#hero').innerHTML = `
     <div class="card big" style="animation-delay:.02s">

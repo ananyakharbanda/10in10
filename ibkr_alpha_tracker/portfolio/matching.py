@@ -25,6 +25,7 @@ def match_round_trips(trades_df):
     """
     closed = []
     open_lots = []
+    orphans = []   # sells with no opening lot to match against
 
     for ticker, group in trades_df.groupby("ticker"):
         group = group.sort_values("datetime")
@@ -67,8 +68,17 @@ def match_round_trips(trades_df):
                     sell_qty -= matched
                     if lot["qty"] <= EPS:
                         queue.popleft()
-                # leftover sell_qty here = orphan sell (no opening lot in data);
-                # dropped for now - Day 6 item #2 will surface these as a warning.
+                # Leftover sell_qty = a sell with no opening lot in the data
+                # (e.g. the buy aged out of the window and isn't in the ledger).
+                # Record it so the system can WARN rather than silently understate.
+                if sell_qty > EPS:
+                    orphans.append({
+                        "ticker": ticker,
+                        "datetime": ex["datetime"],
+                        "unmatched_quantity": sell_qty,
+                        "price": ex["price"],
+                        "currency": ex["currency"],
+                    })
 
         # Anything left in the queue was never sold = still open.
         for lot in queue:
@@ -83,7 +93,7 @@ def match_round_trips(trades_df):
                     "entry_commission": lot["qty"] * lot["comm_per_share"],
                 })
 
-    return pd.DataFrame(closed), pd.DataFrame(open_lots)
+    return pd.DataFrame(closed), pd.DataFrame(open_lots), pd.DataFrame(orphans)
 
 
 if __name__ == "__main__":
@@ -96,7 +106,7 @@ if __name__ == "__main__":
 
     xml = fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)
     trades = merge_trades(filter_stock_trades(parse_trades(xml)))
-    closed, open_lots = match_round_trips(trades)
+    closed, open_lots, orphans = match_round_trips(trades)
 
     print(f"{len(closed)} closed round-trips:")
     print(closed[["ticker", "quantity", "entry_date", "exit_date", "entry_price",
@@ -104,3 +114,9 @@ if __name__ == "__main__":
     print(f"\n{len(open_lots)} open lots:")
     print(open_lots[["ticker", "quantity", "entry_date", "entry_price",
                      "entry_commission", "currency"]].to_string(index=False))
+    if len(orphans):
+        print(f"\n!! {len(orphans)} ORPHAN SELL(S) - no opening trade found "
+              f"(alpha may be understated):")
+        print(orphans.to_string(index=False))
+    else:
+        print("\nNo orphan sells - every closing trade matched an opening lot.")

@@ -19,7 +19,6 @@ from portfolio.curve import (build_daily_alpha, alpha_sharpe, alpha_sortino,
 from visualizations.plots import (alpha_equity_curve, alpha_drawdown_chart,
                                   trade_alpha_waterfall, returns_scatter,
                                   monthly_alpha_heatmap, holdings_treemap)
-from data.ledger import merge_trades
 
 _BENCHMARKS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "benchmarks.json")
@@ -43,10 +42,9 @@ def build_dashboard_payload(currency="usd"):
     benchmark_map, default_bench, yf_symbol = load_benchmarks()
 
     # --- live fetch + parse + match ---
-    fresh = filter_stock_trades(parse_trades(
+    trades = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
-    trades = merge_trades(fresh)          # union into the ledger, compute from it
-    closed, open_lots = match_round_trips(trades)
+    closed, open_lots, orphans = match_round_trips(trades)
 
     # --- price data through TODAY (cached; today's bar refreshed by TTL) ---
     start = pd.concat([closed["entry_date"], open_lots["entry_date"]]).min()
@@ -112,11 +110,22 @@ def build_dashboard_payload(currency="usd"):
                 out[c] = out[c].dt.strftime("%Y-%m-%d")
         return out.round(4).to_dict(orient="records")
 
+    # Surface unmatched sells as warnings rather than silently understating alpha.
+    warnings = []
+    if len(orphans):
+        for _, o in orphans.iterrows():
+            warnings.append(
+                f"Unmatched sell: {o['unmatched_quantity']:g} {o['ticker']} on "
+                f"{pd.Timestamp(o['datetime']).date()} has no opening trade in the "
+                f"ledger - realized alpha may be understated. Backfill older trades "
+                f"to fix (see backfill.py).")
+
     return {
         "metrics": metrics,
         "figures": figures,
         "trades": records(primary_trades, trade_cols),
         "positions": records(primary_open, pos_cols),
+        "warnings": warnings,
         "as_of": end.strftime("%Y-%m-%d %H:%M"),
     }
 
