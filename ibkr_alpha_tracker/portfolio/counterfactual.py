@@ -39,10 +39,24 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
     ntu_entry = 1.0 if native == "USD" else nts_entry / usdsgd_entry
     ntu_exit = 1.0 if native == "USD" else nts_exit / usdsgd_exit
 
-    # Your P&L: convert each cashflow at ITS OWN date's rate. The entry/exit
-    # rates differing is what captures currency drift over the holding period.
-    your_pnl_usd = native_exit_value * ntu_exit - native_capital * ntu_entry
-    your_pnl_sgd = native_exit_value * nts_exit - native_capital * nts_entry
+    # Your GROSS P&L: convert each cashflow at ITS OWN date's rate. The entry/
+    # exit rates differing is what captures currency drift over the holding period.
+    gross_pnl_usd = native_exit_value * ntu_exit - native_capital * ntu_entry
+    gross_pnl_sgd = native_exit_value * nts_exit - native_capital * nts_entry
+
+    # Commissions (native, IBKR sign: negative = a cost), apportioned per trip by
+    # the matcher. Each leg converts at its own date's rate. Charged to YOUR side
+    # only; the benchmark is treated as the idealized frictionless passive
+    # alternative (the conservative choice - it also rewards passive investing for
+    # transacting less). Open lots carry entry_commission with exit_commission 0.
+    entry_comm = trip.get("entry_commission", 0.0) or 0.0
+    exit_comm = trip.get("exit_commission", 0.0) or 0.0
+    commission_usd = entry_comm * ntu_entry + exit_comm * ntu_exit
+    commission_sgd = entry_comm * nts_entry + exit_comm * nts_exit
+
+    # Your NET P&L (commission is negative, so this reduces gross).
+    your_pnl_usd = gross_pnl_usd + commission_usd
+    your_pnl_sgd = gross_pnl_sgd + commission_sgd
 
     # Counterfactual: same entry capital into the benchmark (USD-denominated).
     capital_usd = native_capital * ntu_entry
@@ -65,7 +79,10 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
         # open-position case this is qty x mark; used to size the treemap).
         "exit_value_usd": native_exit_value * ntu_exit,
         "exit_value_sgd": native_exit_value * nts_exit,
+        # NET of your commissions; gross and commission exposed for transparency.
         "your_pnl_usd": your_pnl_usd, "your_pnl_sgd": your_pnl_sgd,
+        "gross_pnl_usd": gross_pnl_usd, "gross_pnl_sgd": gross_pnl_sgd,
+        "commission_usd": commission_usd, "commission_sgd": commission_sgd,
         "benchmark_pnl_usd": benchmark_pnl_usd, "benchmark_pnl_sgd": benchmark_pnl_sgd,
         "alpha_usd": your_pnl_usd - benchmark_pnl_usd,
         "alpha_sgd": your_pnl_sgd - benchmark_pnl_sgd,
