@@ -14,8 +14,13 @@ def _download_with_retry(ticker, start, end, attempts=4):
     last_problem = None
     for _ in range(attempts):
         try:
+            # auto_adjust=False -> 'Close' is split-adjusted but NOT
+            # dividend-adjusted (price return). This matches your own P&L, which
+            # is price-only (from trade prices), so the comparison is symmetric -
+            # neither side counts dividends. (Crediting dividends on both sides is
+            # a faithful future upgrade once Cash Transactions are fetched.)
             raw = yf.download(ticker, start=start, end=end,
-                              auto_adjust=True, progress=False)
+                              auto_adjust=False, progress=False)
             if not raw.empty:
                 return raw
             last_problem = "empty response (likely rate-limited)"
