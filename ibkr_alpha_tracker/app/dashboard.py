@@ -10,6 +10,7 @@ import plotly.io as pio
 import config
 from data.ibkr_client import fetch_flex_report
 from data.parser import parse_trades, filter_stock_trades
+from data.ledger import merge_trades
 from data.benchmark import get_benchmark_prices
 from portfolio.matching import match_round_trips
 from portfolio.counterfactual import compute_all_trade_alphas
@@ -41,9 +42,10 @@ def build_dashboard_payload(currency="usd"):
     """Run the full pipeline and return everything the page needs, as a dict."""
     benchmark_map, default_bench, yf_symbol = load_benchmarks()
 
-    # --- live fetch + parse + match ---
-    trades = filter_stock_trades(parse_trades(
+    # --- live fetch + parse + merge into the persistent ledger, then match ---
+    fresh = filter_stock_trades(parse_trades(
         fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
+    trades = merge_trades(fresh)          # union into the ledger; compute from it
     closed, open_lots, orphans = match_round_trips(trades)
 
     # --- price data through TODAY (cached; today's bar refreshed by TTL) ---
