@@ -45,6 +45,10 @@ def value_open_lots(open_df, benchmark_map, series_by_ticker, usdsgd_prices,
             "exit_date": as_of,
             "exit_price": mark,
             "exit_fx": exit_fx,
+            # You've already paid the entry commission; charge it to unrealized
+            # alpha. No exit commission yet (position not sold).
+            "entry_commission": lot.get("entry_commission", 0.0),
+            "exit_commission": 0.0,
         }
 
         benches = benchmark_map.get(ticker, [default_benchmark])
