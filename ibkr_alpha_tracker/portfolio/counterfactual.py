@@ -69,6 +69,7 @@ def compute_trade_alpha(trip, benchmark_prices, usdsgd_prices):
 
     return {
         "ticker": trip["ticker"], "quantity": qty, "currency": native,
+        "entry_price": trip["entry_price"],
         "entry_date": trip["entry_date"], "exit_date": trip["exit_date"],
         "hold_days": hold_days, "benchmark_return": benchmark_return,
         # Your own gross price return in native currency (a ratio, so it pairs
