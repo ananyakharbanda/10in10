@@ -54,6 +54,7 @@ header{position:sticky;top:0;z-index:40;background:rgba(244,239,228,.86);backdro
 .card .v{font-size:30px}
 .pos{color:var(--pos)} .neg{color:var(--neg)}
 .subgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:8px}
+.subhead{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#8a8275;margin:0 0 8px 2px}
 .subgrid .card .v{font-size:24px}
 .split{display:flex;gap:8px;align-items:baseline}
 .split .lbl{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
@@ -185,6 +186,19 @@ td.tk{font-weight:500}
     <div class="shead"><h2>Open positions</h2></div>
     <div class="tablewrap"><table id="positionsTable"></table></div>
   </section>
+
+  <section id="analyticsSection" style="display:none">
+    <div class="shead"><h2>Attribution &amp; robustness</h2></div>
+    <div id="twrCard"></div>
+    <div class="grid2">
+      <div><div class="subhead">Alpha by holding period</div><div class="tablewrap"><table id="holdTable"></table></div></div>
+      <div><div class="subhead">Alpha by position size</div><div class="tablewrap"><table id="sizeTable"></table></div></div>
+    </div>
+    <div id="sensWrap" style="margin-top:20px;display:none">
+      <div class="subhead">Benchmark sensitivity — alpha under each candidate benchmark</div>
+      <div class="tablewrap"><table id="sensTable"></table></div>
+    </div>
+  </section>
 </div>
 
 <!-- benchmark editor -->
@@ -261,11 +275,16 @@ function render(d){
       <div class="note">realized ${money(m.realized_alpha,ccy)} · unrealized ${money(m.unrealized_alpha,ccy)} · ${m.n_closed} closed, ${m.n_open} open</div>
     </div>`;
 
+  const st = d.stats || {};
+  const shCI = (st.sharpe && st.sharpe.lo != null) ? `95% CI ${st.sharpe.lo} … ${st.sharpe.hi}` : '';
+  const wrCI = (st.win_rate && st.win_rate.lo != null) ? `95% CI ${st.win_rate.lo}–${st.win_rate.hi}% · n=${st.win_rate.n}` : '';
   $('#subgrid').innerHTML = `
-    <div class="card" style="animation-delay:.14s"><div class="k">Alpha Sharpe</div><div class="v ${cls(m.alpha_sharpe)}">${m.alpha_sharpe}</div></div>
+    <div class="card" style="animation-delay:.14s"><div class="k">Alpha Sharpe</div><div class="v ${cls(m.alpha_sharpe)}">${m.alpha_sharpe}</div><div class="note">${shCI}</div></div>
     <div class="card" style="animation-delay:.18s"><div class="k">Alpha Sortino</div><div class="v ${cls(m.alpha_sortino)}">${m.alpha_sortino}</div></div>
-    <div class="card" style="animation-delay:.22s"><div class="k">Win rate</div><div class="v">${m.win_rate}%</div></div>
+    <div class="card" style="animation-delay:.22s"><div class="k">Win rate</div><div class="v">${m.win_rate}%</div><div class="note">${wrCI}</div></div>
     <div class="card" style="animation-delay:.26s"><div class="k">Max drawdown</div><div class="v neg">${SYM(ccy)}${m.max_drawdown.toLocaleString()}</div></div>`;
+
+  renderAnalytics(d, ccy);
 
   for(const id of PLOTS) drawPlot(id, d.figures[id]);
   renderTrades(d.trades, ccy);
@@ -311,6 +330,53 @@ function renderPositions(rows, ccy){
       <td class="num ${cls(p[a])}">${money(p[a],ccy)}</td></tr>`;
   }
   $('#positionsTable').innerHTML = h + '</tbody>';
+}
+
+/* ---------- Day 7 analytics ---------- */
+function renderAnalytics(d, ccy){
+  const sec = $('#analyticsSection');
+  if(!sec) return;
+  sec.style.display = '';
+
+  // account-level TWR (only present if Cash Txns + NAV were in the Flex report)
+  const tw = d.twr;
+  if(tw && tw.account_twr_pct != null){
+    const ex = tw.excess_pct;
+    $('#twrCard').innerHTML = `
+      <div class="card" style="margin-bottom:20px">
+        <div class="k">Account time-weighted return · base ccy · ${tw.start} → ${tw.end}</div>
+        <div class="v ${cls(ex)}">${tw.account_twr_pct}% <span style="font-size:14px;color:#8a8275">vs benchmark ${tw.benchmark_twr_pct}%</span></div>
+        <div class="note">${ex>=0?'+':''}${ex}% excess · whole-account return incl. cash drag, deposit timing neutralised · ${tw.n_days} days</div>
+      </div>`;
+  } else {
+    $('#twrCard').innerHTML = `
+      <div class="warnbanner show" style="margin-bottom:20px">
+        <b>Account TWR unavailable</b>
+        <div>Add <b>Cash Transactions</b> and <b>Equity Summary in Base</b> to your IBKR Flex query to unlock whole-account time-weighted return.</div>
+      </div>`;
+  }
+
+  // attribution tables
+  const av = 'alpha';
+  const buk = (rows) => {
+    let h = `<thead><tr><th>Bucket</th><th>Alpha · ${ccy}</th><th>Trades</th></tr></thead><tbody>`;
+    for(const r of (rows||[])) h += `<tr><td class="tk">${r.bucket}</td><td class="num ${cls(r[av])}">${money(r[av],ccy)}</td><td class="num">${r.n}</td></tr>`;
+    return h + '</tbody>';
+  };
+  $('#holdTable').innerHTML = buk(d.attribution && d.attribution.by_hold_period);
+  $('#sizeTable').innerHTML = buk(d.attribution && d.attribution.by_size);
+
+  // benchmark sensitivity (only if any ticker has >1 candidate benchmark)
+  const sens = d.sensitivity || [];
+  if(sens.length){
+    $('#sensWrap').style.display = '';
+    let h = `<thead><tr><th>Ticker</th><th>Benchmark</th><th>Alpha · ${ccy}</th><th></th></tr></thead><tbody>`;
+    for(const r of sens) h += `<tr><td class="tk">${r.ticker}</td><td><span class="tag">${r.benchmark}</span></td>
+      <td class="num ${cls(r[av])}">${money(r[av],ccy)}</td><td>${r.primary?'<span class="tag">primary</span>':''}</td></tr>`;
+    $('#sensTable').innerHTML = h + '</tbody>';
+  } else {
+    $('#sensWrap').style.display = 'none';
+  }
 }
 
 /* ---------- benchmark editor ---------- */
