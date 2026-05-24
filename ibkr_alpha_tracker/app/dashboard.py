@@ -1,7 +1,7 @@
 """Live data layer: run the whole pipeline fresh and return one JSON-ready
 payload (metrics + the six Plotly figures + trades + positions). The API calls
 this on every request, so the page always reflects the portfolio as of now."""
-import sys, os, json
+import sys, os, json, math
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
@@ -11,12 +11,17 @@ import config
 from data.ibkr_client import fetch_flex_report
 from data.parser import parse_trades, filter_stock_trades
 from data.ledger import merge_trades
+from data.cash import parse_cash_transactions, external_flows_by_day, parse_daily_nav
 from data.benchmark import get_benchmark_prices
 from portfolio.matching import match_round_trips
 from portfolio.counterfactual import compute_all_trade_alphas
 from portfolio.positions import value_open_lots
 from portfolio.curve import (build_daily_alpha, alpha_sharpe, alpha_sortino,
                              alpha_max_drawdown)
+from portfolio.stats import sharpe_with_ci, win_rate_wilson
+from portfolio.attribution import (alpha_by_hold_period, alpha_by_size,
+                                   benchmark_sensitivity)
+from portfolio.twr import build_twr_summary
 from visualizations.plots import (alpha_equity_curve, alpha_drawdown_chart,
                                   trade_alpha_waterfall, returns_scatter,
                                   monthly_alpha_heatmap, holdings_treemap)
@@ -38,13 +43,24 @@ def _fig_json(fig):
     return json.loads(pio.to_json(fig))
 
 
+def _nan_to_none(obj):
+    """Recursively replace NaN floats with None so the payload is valid JSON."""
+    if isinstance(obj, dict):
+        return {k: _nan_to_none(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_nan_to_none(v) for v in obj]
+    if isinstance(obj, float) and math.isnan(obj):
+        return None
+    return obj
+
+
 def build_dashboard_payload(currency="usd"):
     """Run the full pipeline and return everything the page needs, as a dict."""
     benchmark_map, default_bench, yf_symbol = load_benchmarks()
 
     # --- live fetch + parse + merge into the persistent ledger, then match ---
-    fresh = filter_stock_trades(parse_trades(
-        fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)))
+    raw_xml = fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)
+    fresh = filter_stock_trades(parse_trades(raw_xml))
     trades = merge_trades(fresh)          # union into the ledger; compute from it
     closed, open_lots, orphans = match_round_trips(trades)
 
@@ -132,12 +148,47 @@ def build_dashboard_payload(currency="usd"):
                 f"ledger - realized alpha may be understated. Backfill older trades "
                 f"to fix (see backfill.py).")
 
+    # --- Day 7 analytics ---
+    # #10 statistical qualification of the headline metrics
+    sh = sharpe_with_ci(daily["alpha_ret"])
+    wins = int((primary_trades[col] > 0).sum())
+    wr = win_rate_wilson(wins, len(primary_trades))
+    stats = _nan_to_none({"sharpe": sh, "win_rate": wr})
+
+    # #8 attribution (pure views over alphas already computed)
+    def _buckets(df):
+        d = df.copy()
+        d["bucket"] = d["bucket"].astype(str)
+        return d.round(4).to_dict(orient="records")
+
+    attribution = {
+        "by_hold_period": _buckets(alpha_by_hold_period(alphas, currency)),
+        "by_size": _buckets(alpha_by_size(alphas, currency)),
+    }
+    # #9 benchmark sensitivity (uses the non-primary benchmark rows the engine emits)
+    sens = benchmark_sensitivity(alphas, currency)
+    sensitivity = sens.round(4).to_dict(orient="records") if not sens.empty else []
+
+    # #6 account-level TWR - only if the Flex report carries Cash Txns + NAV
+    nav = parse_daily_nav(raw_xml)
+    flows = external_flows_by_day(parse_cash_transactions(raw_xml))
+    twr = None
+    if not nav.empty:
+        qqq = series_by_ticker[default_bench]          # benchmark in base ccy (SGD)
+        idx = qqq.index.union(usdsgd.index)
+        bench_base = (qqq.reindex(idx).ffill() * usdsgd.reindex(idx).ffill()).dropna()
+        twr = build_twr_summary(nav, flows, bench_base)
+
     return {
         "metrics": metrics,
         "figures": figures,
         "trades": records(primary_trades, trade_cols),
         "positions": records(primary_open, pos_cols),
         "warnings": warnings,
+        "stats": stats,
+        "attribution": attribution,
+        "sensitivity": sensitivity,
+        "twr": twr,
         "as_of": end.strftime("%Y-%m-%d %H:%M"),
     }
 
