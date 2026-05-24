@@ -71,6 +71,38 @@ def dashboard(currency: str = "usd", refresh: bool = False):
     return JSONResponse(_get_payload(currency, nocache=refresh))
 
 
+# --- #7 scheduled precompute -------------------------------------------------
+# Refresh both currencies in the background so a page load is instant (served
+# from a warm cache) instead of waiting on the live pipeline. Interval is set by
+# PRECOMPUTE_SECONDS (0 disables). Failures are swallowed - the on-demand path
+# still works and surfaces errors normally.
+_PRECOMPUTE_SECONDS = int(os.environ.get("PRECOMPUTE_SECONDS", "0"))
+
+
+@app.on_event("startup")
+async def _start_precompute():
+    if _PRECOMPUTE_SECONDS <= 0:
+        return
+    import asyncio
+
+    async def _loop():
+        while True:
+            for cur in ("usd", "sgd"):
+                try:
+                    payload = await asyncio.to_thread(_build_fresh, cur)
+                    _cache[cur] = (time.time(), payload)
+                except Exception as e:
+                    print(f"[precompute] {cur} failed: {type(e).__name__}: {e}")
+            await asyncio.sleep(_PRECOMPUTE_SECONDS)
+
+    asyncio.create_task(_loop())
+
+
+def _build_fresh(currency):
+    from app.dashboard import build_dashboard_payload
+    return build_dashboard_payload(currency)
+
+
 @app.get("/api/benchmarks")
 def get_benchmarks():
     with open(BENCHMARKS_PATH) as f:
