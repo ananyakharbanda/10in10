@@ -11,7 +11,7 @@ import config
 from data.ibkr_client import fetch_flex_report
 from data.parser import parse_trades, filter_stock_trades
 from data.ledger import merge_trades
-from data.cash import parse_cash_transactions, external_flows_by_day, parse_daily_nav
+from data.cash import parse_cash_transactions, external_flows_by_day, parse_change_in_nav
 from data.benchmark import get_benchmark_prices
 from portfolio.matching import match_round_trips
 from portfolio.counterfactual import compute_all_trade_alphas
@@ -21,7 +21,7 @@ from portfolio.curve import (build_daily_alpha, alpha_sharpe, alpha_sortino,
 from portfolio.stats import sharpe_with_ci, win_rate_wilson
 from portfolio.attribution import (alpha_by_hold_period, alpha_by_size,
                                    benchmark_sensitivity)
-from portfolio.twr import build_twr_summary
+from portfolio.twr import build_twr_from_nav_summary
 from visualizations.plots import (alpha_equity_curve, alpha_drawdown_chart,
                                   trade_alpha_waterfall, returns_scatter,
                                   monthly_alpha_heatmap, holdings_treemap)
@@ -169,15 +169,14 @@ def build_dashboard_payload(currency="usd"):
     sens = benchmark_sensitivity(alphas, currency)
     sensitivity = sens.round(4).to_dict(orient="records") if not sens.empty else []
 
-    # #6 account-level TWR - only if the Flex report carries Cash Txns + NAV
-    nav = parse_daily_nav(raw_xml)
-    flows = external_flows_by_day(parse_cash_transactions(raw_xml))
+    # #6 account-level TWR - reads IBKR's own TWR from ChangeInNAV (if present)
+    nav_summary = parse_change_in_nav(raw_xml)
     twr = None
-    if not nav.empty:
+    if nav_summary:
         qqq = series_by_ticker[default_bench]          # benchmark in base ccy (SGD)
         idx = qqq.index.union(usdsgd.index)
         bench_base = (qqq.reindex(idx).ffill() * usdsgd.reindex(idx).ffill()).dropna()
-        twr = build_twr_summary(nav, flows, bench_base)
+        twr = build_twr_from_nav_summary(nav_summary, bench_base)
 
     return {
         "metrics": metrics,

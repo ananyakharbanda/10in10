@@ -45,6 +45,33 @@ def benchmark_twr(price_series, start, end):
     return s.iloc[-1] / s.iloc[0] - 1.0
 
 
+def build_twr_from_nav_summary(nav_summary, benchmark_price_base):
+    """Account TWR (read from IBKR's ChangeInNAV) vs the benchmark's return over
+    the same window. benchmark_price_base must be in the account base currency.
+    Returns a dict for the payload, or None if the summary/TWR is missing.
+
+    Note: TWR neutralises deposit timing, so it's directly comparable to a
+    buy-and-hold index return over the same window - and any shortfall partly
+    reflects cash drag (periods the account sat in cash while the index rose),
+    which is exactly what an account-level view is meant to reveal."""
+    if not nav_summary or nav_summary.get("ibkr_twr_pct") is None:
+        return None
+    start, end = nav_summary["from_date"], nav_summary["to_date"]
+    acct = nav_summary["ibkr_twr_pct"]                 # already a percent
+    bench = benchmark_twr(benchmark_price_base, start, end)
+    bench_pct = None if pd.isna(bench) else round(bench * 100, 2)
+    excess = None if bench_pct is None else round(acct - bench_pct, 2)
+    return {
+        "account_twr_pct": round(acct, 2),
+        "benchmark_twr_pct": bench_pct,
+        "excess_pct": excess,
+        "start": start.strftime("%Y-%m-%d"),
+        "end": end.strftime("%Y-%m-%d"),
+        "n_days": int((end - start).days),
+        "source": "IBKR ChangeInNAV",
+    }
+
+
 def build_twr_summary(nav, flows, benchmark_price_base):
     """Account TWR vs benchmark over the NAV window. benchmark_price_base must be
     in the account base currency. Returns a dict ready for the payload, or None

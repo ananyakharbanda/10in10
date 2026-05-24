@@ -53,22 +53,30 @@ def external_flows_by_day(cash_df):
     return ext.groupby("date")["amount_base"].sum()
 
 
-def parse_daily_nav(xml_text):
-    """Daily account NAV (base currency) from the Equity Summary section, as a
-    date-indexed Series. Empty if the section isn't in the report."""
+def parse_change_in_nav(xml_text):
+    """The ChangeInNAV summary row (one per statement period). IBKR computes its
+    own time-weighted return here ('twr', already a percent), which is more
+    authoritative than anything we could reconstruct, so we read it directly.
+    Returns a dict, or None if the section isn't in the report."""
     root = ET.fromstring(xml_text)
-    rows = []
-    for el in root.findall(".//EquitySummaryByReportDateInBase"):
-        a = el.attrib
-        d = _to_date(a.get("reportDate"))
-        total = a.get("total")
-        if d is not pd.NaT and total is not None:
-            rows.append((d, float(total)))
-    if not rows:
-        return pd.Series(dtype=float)
-    s = pd.Series(dict(rows)).sort_index()
-    s.index = pd.to_datetime(s.index)
-    return s
+    el = root.find(".//ChangeInNAV")
+    if el is None:
+        return None
+    a = el.attrib
+
+    def num(k):
+        v = a.get(k)
+        return float(v) if v not in (None, "") else None
+
+    return {
+        "from_date": _to_date(a.get("fromDate")),
+        "to_date": _to_date(a.get("toDate")),
+        "currency": a.get("currency"),
+        "starting_value": num("startingValue"),
+        "ending_value": num("endingValue"),
+        "deposits_withdrawals": num("depositsWithdrawals"),
+        "ibkr_twr_pct": num("twr"),          # IBKR's own TWR, in percent
+    }
 
 
 if __name__ == "__main__":
@@ -79,13 +87,19 @@ if __name__ == "__main__":
 
     xml = fetch_flex_report(config.IBKR_TOKEN, config.TRADES_QUERY_ID)
     cash = parse_cash_transactions(xml)
-    nav = parse_daily_nav(xml)
-    if cash.empty and nav.empty:
-        print("No Cash Transactions or Equity Summary in this report.")
+    nav = parse_change_in_nav(xml)
+    if cash.empty and nav is None:
+        print("No Cash Transactions or ChangeInNAV in this report.")
         print("Add BOTH sections to your Flex query to enable account-level TWR:")
         print("  Flex Query -> Sections -> [x] Cash Transactions")
-        print("                            [x] Equity Summary in Base (Change in NAV)")
+        print("                            [x] Change in NAV")
     else:
         print(f"{len(cash)} cash transactions; types: {sorted(cash['type'].unique()) if not cash.empty else '-'}")
         print("External flows by day (base):\n", external_flows_by_day(cash).to_string())
-        print(f"\nDaily NAV points: {len(nav)}  range {nav.index.min()} .. {nav.index.max()}" if not nav.empty else "No NAV series.")
+        if nav:
+            print(f"\nChangeInNAV {nav['from_date'].date()} -> {nav['to_date'].date()} ({nav['currency']}):")
+            print(f"  start {nav['starting_value']:.2f} -> end {nav['ending_value']:.2f}, "
+                  f"deposits {nav['deposits_withdrawals']:.2f}")
+            print(f"  IBKR time-weighted return: {nav['ibkr_twr_pct']:.2f}%")
+        else:
+            print("\nNo ChangeInNAV element.")
