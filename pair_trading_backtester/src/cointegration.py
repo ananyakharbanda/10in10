@@ -32,5 +32,5 @@ X = sm.add_constant(log_prices["PEP"]) # independent variable + intercept
 model = sm.OLS(y, X).fit() # plot the straight line that fits log(KO) as a function of log(PEP)
 beta = model.params["PEP"]
 
-print(f"\nHedge ratio (beta): {beta:. 3f}")
-print(f"Intercept:            {model.params['const']:. 3f}")
+print(f"\nHedge ratio (beta): {beta:.3f}")
+print(f"Intercept:            {model.params['const']:.3f}")
