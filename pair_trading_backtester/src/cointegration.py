@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import statsmodel.api as sm
+import statsmodels.api as sm
 
 # to check for cointegration, load the csv and split the data into in-sample and out-of-sample
 
