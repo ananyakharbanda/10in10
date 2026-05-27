@@ -1,0 +1,12 @@
+# Virtual environment — large, machine-specific, recreated from requirements.txt
+venv/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Cached price data — regenerated from yfinance
+data/*.csv
+
+# OS junk
+.DS_Store
