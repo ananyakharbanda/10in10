@@ -17,3 +17,13 @@ print(prices.describe())
 prices = prices.dropna()
 print("\nShape after dropping missing rows:", prices.shape)
 print("Date range:", prices.index.min().date(), "to", prices.index.max().date())
+
+# --- Step 3: save a cached copy ---
+prices.to_csv("data/ko_pep.csv")
+print("\nSaved to data/ko_pep.csv")
+
+# --- Step 4: look at it ---
+prices.plot(figsize=(12, 6), title="KO vs PEP — Adjusted Close")
+plt.ylabel("Price ($)")
+plt.tight_layout()
+plt.show()
