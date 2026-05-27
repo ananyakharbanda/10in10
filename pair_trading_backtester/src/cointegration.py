@@ -1,4 +1,6 @@
 import pandas as pd
+import numpy as np
+import statsmodel.api as sm
 
 # to check for cointegration, load the csv and split the data into in-sample and out-of-sample
 
@@ -12,12 +14,23 @@ out_sample = prices.loc["2022-01-01":]      # 2022–2024, held back for Day 7
 print("In-sample: ", in_sample.index.min().date(), "to", in_sample.index.max().date(), "| rows:", len(in_sample))
 print("Out-sample:", out_sample.index.min().date(), "to", out_sample.index.max().date(), "| rows:", len(out_sample))
 
-# 3) correlation on PRICE LEVELS (the misleading one) 
+# 3) correlation on PRICE LEVELS (the misleading one, just shows that both went up over a decade, spurious correlation
 corr_levels = in_sample["KO"].corr(in_sample["PEP"])
 
-# 4) correlation on DAILY RETURNS (the honest one)
+# 4) correlation on DAILY RETURNS (the honest one, checks for day-to-day percentage)
 returns = in_sample.pct_change().dropna()
 corr_returns = returns["KO"].corr(returns["PEP"])
 
 print(f"\nCorrelation of price levels:  {corr_levels:.3f}")
 print(f"Correlation of daily returns: {corr_returns:.3f}")
+
+# 5) work in log prices to calculate the hedge ratio
+log_prices = np.log(in_sample)
+y = log_prices["KO"] # dependent variable
+X = sm.add_constant(log_prices["PEP"]) # independent variable + intercept
+
+model = sm.OLS(y, X).fit() # plot the straight line that fits log(KO) as a function of log(PEP)
+beta = model.params["PEP"]
+
+print(f"\nHedge ratio (beta): {beta:. 3f}")
+print(f"Intercept:            {model.params['const']:. 3f}")
