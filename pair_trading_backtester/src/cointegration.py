@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
+import matplotlib.pyplot as plt
 
 # to check for cointegration, load the csv and split the data into in-sample and out-of-sample
 
@@ -34,3 +35,12 @@ beta = model.params["PEP"]
 
 print(f"\nHedge ratio (beta): {beta:.3f}")
 print(f"Intercept:          {model.params['const']:.3f}")
+
+# 6) build the spread (after beta removes PEP's influence from KO, shows the gap)
+spread = y - beta * log_prices["PEP"]
+spread.plot(figsize=(12, 6), title="KO-PEP spread (in-sample), log scale")
+plt.axhline(spread.mean(), color="red", linestyle="--", label="mean")
+plt.ylabel("spread")
+plt.legend()
+plt.tight_layout()
+plt.show()
