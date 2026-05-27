@@ -33,4 +33,4 @@ model = sm.OLS(y, X).fit() # plot the straight line that fits log(KO) as a funct
 beta = model.params["PEP"]
 
 print(f"\nHedge ratio (beta): {beta:.3f}")
-print(f"Intercept:            {model.params['const']:.3f}")
+print(f"Intercept:          {model.params['const']:.3f}")
