@@ -27,3 +27,8 @@ prices.plot(figsize=(12, 6), title="KO vs PEP — Adjusted Close")
 plt.ylabel("Price ($)")
 plt.tight_layout()
 plt.show()
+
+(prices / prices.iloc[0]).plot(figsize=(12, 6), title="KO vs PEP — normalized to 1.0")
+plt.ylabel("Growth (×)")
+plt.tight_layout()
+plt.show()
