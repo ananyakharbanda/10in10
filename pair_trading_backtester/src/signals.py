@@ -30,3 +30,25 @@ zscore = (spread - rolling_mean) / rolling_std
 
 print(f"\nRolling z-score: mean={zscore.mean():.3f}, std={zscore.std():.3f}")
 print(f"NaNs at start (window warm-up): {zscore.isna().sum()}")
+
+# generate raw position signal from z-score
+entry_z = 2.0
+exit_z  = 0.5
+
+# +1 means long the spread (long KO, short PEP);
+# -1 means short the spread (short KO, long PEP);
+#  0 means flat (no position).
+position = pd.Series(0, index=zscore.index)
+
+# enter
+position[zscore >  entry_z] = -1   # spread is high → short it (expect fall)
+position[zscore < -entry_z] =  1   # spread is low  → long  it (expect rise)
+
+# exit (when z comes back inside ±exit_z, close)
+# will do this properly with a stateful loop next, placeholder for now
+
+# shift forward one day: trade tomorrow on today's signal
+position = position.shift(1).fillna(0)
+
+print(f"\nPosition counts:")
+print(position.value_counts())
