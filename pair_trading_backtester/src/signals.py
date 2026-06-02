@@ -52,3 +52,23 @@ position = position.shift(1).fillna(0)
 
 print(f"\nPosition counts:")
 print(position.value_counts())
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+ax1.plot(zscore, label="z-score")
+ax1.axhline( entry_z, color="red",   linestyle="--", label=f"entry ±{entry_z}")
+ax1.axhline(-entry_z, color="red",   linestyle="--")
+ax1.axhline( exit_z,  color="green", linestyle=":",  label=f"exit ±{exit_z}")
+ax1.axhline(-exit_z,  color="green", linestyle=":")
+ax1.axhline(0, color="black", linewidth=0.5)
+ax1.set_ylabel("z-score")
+ax1.legend(loc="upper left")
+ax1.set_title("KO-PEP spread z-score (rolling 30-day) and position")
+
+ax2.plot(position, drawstyle="steps-post")
+ax2.set_ylabel("position")
+ax2.set_yticks([-1, 0, 1])
+ax2.axhline(0, color="black", linewidth=0.5)
+
+plt.tight_layout()
+plt.show()
