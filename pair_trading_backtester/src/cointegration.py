@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+from statsmodels.tsa.stattools import coint, adfuller
 
 # to check for cointegration, load the csv and split the data into in-sample and out-of-sample
 
