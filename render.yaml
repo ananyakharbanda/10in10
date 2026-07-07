@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ibkr-alpha-tracker
+    runtime: python
+    plan: free
+    rootDir: ibkr_alpha_tracker
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      # Secrets — set the actual values in the Render dashboard (sync: false
+      # means Render will prompt for them and never store them in git).
+      - key: IBKR_TOKEN
+        sync: false
+      - key: DASHBOARD_USER
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      # Non-secret config with defaults; override in the dashboard if needed.
+      - key: TRADES_QUERY_ID
+        value: "1514323"
+      - key: POSITIONS_QUERY_ID
+        value: "1514326"
+      # Refresh both currencies in the background so page loads hit a warm cache.
+      - key: PRECOMPUTE_SECONDS
+        value: "600"
