@@ -14,8 +14,8 @@ from data.ibkr_client import fetch_flex_report
 from data.parser import parse_trades, filter_stock_trades
 from data.ledger import merge_trades
 
-FROM_DATE = "20250101"   # yyyymmdd - must be <= 365 days before TO_DATE
-TO_DATE = "20251231"
+FROM_DATE = "20241115"   # yyyymmdd - must be <= 365 days before TO_DATE
+TO_DATE = "20251114"
 
 if __name__ == "__main__":
     print(f"Backfilling window {FROM_DATE} -> {TO_DATE} ...")
